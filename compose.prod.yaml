@@ -36,7 +36,7 @@ services:
       - mosquitto_certs:/mosquitto-certs
       - ./scripts/publish-certificate.sh:/publish-certificate.sh:ro
     entrypoint: ["/bin/sh", "-c"]
-    command: ["certbot certonly --non-interactive --agree-tos --email '$${ACME_EMAIL}' --webroot -w /var/www/certbot --ip-address '$${PUBLIC_IP}' --preferred-profile shortlived"]
+    command: ["certbot certonly --non-interactive --agree-tos --email \"$${ACME_EMAIL}\" --webroot -w /var/www/certbot --ip-address \"$${PUBLIC_IP}\" --preferred-profile shortlived"]
     environment:
       ACME_EMAIL: ${ACME_EMAIL:?Configure ACME_EMAIL}
       PUBLIC_IP: ${PUBLIC_IP:?Configure PUBLIC_IP}
