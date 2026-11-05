@@ -95,6 +95,36 @@ Para uma VPS com IP público, configure `PUBLIC_IP` e `ACME_EMAIL` no `.env`, ap
 
 Os certificados IP do Let's Encrypt são de curta duração. Para instalar uma renovação automática a cada 12 horas, execute `sudo sh scripts/install-renewal-timer.sh` no diretório do projeto. O serviço renova quando necessário e recarrega Nginx e Mosquitto depois de publicar o certificado renovado. Para validar a configuração do Compose, execute `docker compose -f compose.yaml -f compose.prod.yaml config`.
 
+### Primeiro deploy na VPS
+
+Os comandos abaixo pressupõem uma VPS Linux com Docker Engine, o plugin Docker Compose e Git instalados. Confirme com `docker --version` e `docker compose version`. O deploy também usa `envsubst` (pacote `gettext-base` em Debian/Ubuntu).
+
+```bash
+sudo apt update
+sudo apt install -y git gettext-base
+git clone <URL_DO_REPOSITORIO> regasync
+cd regasync
+cp .env.example .env
+nano .env
+```
+
+No `.env`, troque `DATABASE_PASSWORD`, `MQTT_SERVER_PASSWORD` e `MQTT_ESP_PASSWORD` por segredos fortes e diferentes. Defina o IP público em `PUBLIC_IP`, seu e-mail em `ACME_EMAIL` e os dados de acesso inicial em `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL` e `BOOTSTRAP_ADMIN_PASSWORD`. Mantenha `BOOTSTRAP_ADMIN_ENABLED=true` durante o primeiro deploy. Para gerar um segredo aleatório sem caracteres especiais, use `openssl rand -hex 32` e copie um valor diferente para cada senha.
+
+Libere as portas TCP 80 e 443 para o site e TCP 8883 para o MQTT TLS no firewall da VPS e no painel do provedor. Se for usar UFW, autorize também sua porta SSH antes de ativá-lo. Não libere 1883 nem 5432 publicamente.
+
+```bash
+sh scripts/deploy-vps.sh
+```
+
+Quando o comando terminar, acesse `https://SEU_IP/login` e use o e-mail e a senha de administrador configurados. Depois de confirmar o login, edite `.env`, defina `BOOTSTRAP_ADMIN_ENABLED=false` e apague o valor de `BOOTSTRAP_ADMIN_PASSWORD`; aplique a mudança com:
+
+```bash
+docker compose -f compose.yaml -f compose.prod.yaml up -d --force-recreate app
+sudo sh scripts/install-renewal-timer.sh
+```
+
+Para atualizar o projeto no futuro, faça `git pull` e rode `sh scripts/deploy-vps.sh` novamente. A renovação automática usa o timer instalado e não exige repetir o deploy manualmente.
+
 ```bash
 npm ci
 npm run check:ui

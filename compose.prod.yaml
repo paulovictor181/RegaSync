@@ -2,7 +2,7 @@ services:
   app:
     environment:
       SESSION_COOKIE_SECURE: "true"
-      BOOTSTRAP_ADMIN_ENABLED: "false"
+      BOOTSTRAP_ADMIN_ENABLED: ${BOOTSTRAP_ADMIN_ENABLED:-false}
     ports: []
   db:
     ports: []

@@ -19,6 +19,13 @@ chmod 640 /mosquitto/config/passwd /mosquitto/config/acl
 if [ -s /mosquitto/certs/fullchain.pem ] && [ -s /mosquitto/certs/privkey.pem ]; then
   cp /bootstrap/mosquitto.prod.conf /mosquitto/config/mosquitto.conf
 else
-  cp /bootstrap/mosquitto.conf /mosquitto/config/mosquitto.conf
+  cat > /mosquitto/config/mosquitto.conf <<'EOF'
+listener 1883
+allow_anonymous false
+password_file /mosquitto/config/passwd
+acl_file /mosquitto/config/acl
+persistence true
+persistence_location /mosquitto/data/
+EOF
 fi
 exec mosquitto -c /mosquitto/config/mosquitto.conf
