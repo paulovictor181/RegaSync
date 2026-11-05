@@ -1,0 +1,47 @@
+services:
+  app:
+    environment:
+      SESSION_COOKIE_SECURE: "true"
+      BOOTSTRAP_ADMIN_ENABLED: "false"
+    ports: []
+  db:
+    ports: []
+  mosquitto:
+    entrypoint: ["/bin/sh", "/bootstrap/start-prod.sh"]
+    volumes:
+      - ./mosquitto:/bootstrap:ro
+      - mosquitto_certs:/mosquitto/certs:ro
+    ports:
+      - "8883:8883"
+  nginx:
+    image: nginx:1.28-alpine
+    environment:
+      PUBLIC_IP: ${PUBLIC_IP:?Configure PUBLIC_IP}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/site.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/active.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot_data:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+    depends_on: [app]
+    restart: unless-stopped
+  certbot:
+    image: certbot/certbot:v5.4.0
+    profiles: ["certificates"]
+    volumes:
+      - certbot_data:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+      - mosquitto_certs:/mosquitto-certs
+      - ./scripts/publish-certificate.sh:/publish-certificate.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["certbot certonly --non-interactive --agree-tos --email '$${ACME_EMAIL}' --webroot -w /var/www/certbot --ip-address '$${PUBLIC_IP}' --preferred-profile shortlived"]
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?Configure ACME_EMAIL}
+      PUBLIC_IP: ${PUBLIC_IP:?Configure PUBLIC_IP}
+    restart: "no"
+volumes:
+  certbot_data:
+  certbot_webroot:
+  mosquitto_certs:

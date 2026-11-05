@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:replace="~{fragments/layout :: head('Dashboard de sensores')}"></head>
+  <body class="flex min-h-dvh flex-col">
+    <header th:replace="~{fragments/layout :: header}"></header>
+    <main id="conteudo" class="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:px-8 sm:py-10">
+      <section class="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <p class="text-xs font-semibold tracking-widest text-brand-600 uppercase">
+            Monitoramento em tempo real
+          </p>
+          <h1 class="mt-3 text-3xl font-semibold text-slate-900">Dashboard de sensores</h1>
+          <p class="mt-2 text-sm text-slate-500">
+            As últimas leituras aparecem aqui e são atualizadas a cada cinco segundos.
+          </p>
+        </div>
+        <a th:if="${isAdmin}" th:href="@{/admin/sensores/novo}" class="button-primary">
+          Cadastrar sensor
+          <span aria-hidden="true">+</span>
+        </a>
+      </section>
+
+      <div th:if="${successMessage}" class="notice-success mt-5" th:text="${successMessage}"></div>
+
+      <form
+        class="mt-7 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]"
+      >
+        <label class="sr-only" for="sensor-search">Buscar sensores</label>
+        <input
+          id="sensor-search"
+          name="q"
+          th:value="${q}"
+          placeholder="Buscar por nome ou número"
+          class="form-input mt-0"
+        />
+        <label class="sr-only" for="sensor-type-filter">Filtrar por tipo</label>
+        <select id="sensor-type-filter" name="type" class="form-input mt-0 sm:w-auto">
+          <option value="">Todos os tipos</option>
+          <option
+            th:each="t:${types}"
+            th:value="${t}"
+            th:text="${t == T(br.com.ufersa.regasync.sensor.model.SensorType).UMIDADE ? 'Umidade' : 'Fluxo'}"
+            th:selected="${t==type}"
+          ></option>
+        </select>
+        <label class="sr-only" for="sensor-active-filter">Filtrar por estado</label>
+        <select id="sensor-active-filter" name="active" class="form-input mt-0 sm:w-auto">
+          <option value="">Todos os estados</option>
+          <option value="true" th:selected="${active==true}">Ativos</option>
+          <option value="false" th:selected="${active==false}">Inativos</option>
+        </select>
+        <button class="button-secondary">Filtrar</button>
+      </form>
+
+      <section
+        th:if="${!sensors.empty}"
+        aria-label="Leituras mais recentes dos sensores"
+        class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+      >
+        <article
+          th:each="s:${sensors.content}"
+          class="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6"
+        >
+          <header class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p
+                class="text-xs font-semibold tracking-wide text-brand-600 uppercase"
+                th:text="${s.type == T(br.com.ufersa.regasync.sensor.model.SensorType).UMIDADE ? 'Umidade do solo' : 'Fluxo de água'}"
+              >
+                Tipo do sensor
+              </p>
+              <h2 class="mt-1 break-words text-lg font-semibold text-slate-900" th:text="${s.name}">
+                Sensor
+              </h2>
+            </div>
+            <span
+              class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold"
+              th:classappend="${s.active ? ' bg-brand-50 text-brand-700' : ' bg-slate-100 text-slate-500'}"
+              th:text="${s.active ? 'Ativo' : 'Inativo'}"
+            >
+              Ativo
+            </span>
+          </header>
+
+          <div class="mt-5 rounded-xl bg-brand-50 p-4">
+            <p class="text-xs font-medium text-slate-500">Última leitura</p>
+            <p
+              th:id="'reading-'+${s.id}"
+              class="mt-1 text-3xl font-semibold tracking-tight text-brand-900"
+              aria-live="polite"
+            >
+              Aguardando leitura
+            </p>
+            <time
+              th:id="'time-'+${s.id}"
+              class="mt-2 block text-xs text-slate-500"
+              th:text="${'Sem dados recebidos'}"
+            >
+              Sem dados recebidos
+            </time>
+          </div>
+
+          <div class="mt-4 flex-1">
+            <p class="text-xs text-slate-500">Tópico MQTT</p>
+            <p class="mt-1 break-all font-mono text-sm text-slate-700" th:text="${s.topic()}">
+              /umidade/1
+            </p>
+          </div>
+
+          <footer class="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+            <a
+              th:href="@{/sensores/{id}(id=${s.id})}"
+              class="text-sm font-semibold text-brand-700 hover:underline"
+            >
+              Histórico
+            </a>
+            <a
+              th:if="${isAdmin}"
+              th:href="@{/admin/sensores/{id}/editar(id=${s.id})}"
+              class="text-sm font-semibold text-slate-600 hover:underline"
+            >
+              Configurar
+            </a>
+          </footer>
+        </article>
+      </section>
+
+      <section
+        th:if="${sensors.empty}"
+        class="mt-5 rounded-2xl border border-dashed border-brand-200 bg-white px-6 py-12 text-center"
+      >
+        <h2 class="text-lg font-semibold text-slate-900">Nenhum sensor cadastrado</h2>
+        <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-500">
+          Cadastre um sensor para acompanhar as leituras recentes de umidade ou fluxo de água neste
+          painel.
+        </p>
+        <a th:if="${isAdmin}" th:href="@{/admin/sensores/novo}" class="button-primary mt-5">
+          Cadastrar o primeiro sensor
+        </a>
+      </section>
+
+      <nav
+        th:if="${sensors.totalPages > 1}"
+        aria-label="Paginação dos sensores"
+        class="mt-6 flex items-center justify-between"
+      >
+        <a
+          th:if="${sensors.hasPrevious()}"
+          th:href="@{/sensores(page=${sensors.number-1},q=${q},type=${type},active=${active},size=${size})}"
+          class="button-secondary"
+        >
+          Anterior
+        </a>
+        <span
+          class="text-sm text-slate-500"
+          th:text="${'Página '+(sensors.number+1)+' de '+sensors.totalPages}"
+        >
+          Página 1
+        </span>
+        <a
+          th:if="${sensors.hasNext()}"
+          th:href="@{/sensores(page=${sensors.number+1},q=${q},type=${type},active=${active},size=${size})}"
+          class="button-secondary"
+        >
+          Próxima
+        </a>
+      </nav>
+    </main>
+    <footer th:replace="~{fragments/layout :: footer}"></footer>
+    <script th:inline="javascript">
+      const ids = [[${sensors.content.![id]}]];
+      async function refreshLatestReadings() {
+        if (ids.length === 0) return;
+        try {
+          const response = await fetch('/api/sensores/atuais?ids=' + ids.join(','));
+          if (response.status === 401 || response.redirected) {
+            window.location.href = '/login';
+            return;
+          }
+          if (!response.ok) return;
+          const latest = await response.json();
+          for (const [id, reading] of Object.entries(latest)) {
+            const value = document.getElementById('reading-' + id);
+            const time = document.getElementById('time-' + id);
+            if (value) value.textContent = Number(reading.valor).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' ' + reading.unidade;
+            if (time) time.textContent = 'Medido em ' + new Date(reading.medidoEm).toLocaleString('pt-BR');
+          }
+        } catch (error) {
+          // O dashboard mantém a última leitura visível enquanto tenta atualizar novamente.
+        }
+      }
+      refreshLatestReadings();
+      window.setInterval(refreshLatestReadings, 5000);
+    </script>
+  </body>
+</html>

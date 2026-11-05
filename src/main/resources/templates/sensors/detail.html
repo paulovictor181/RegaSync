@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:replace="~{fragments/layout :: head(${sensor.name})}"></head>
+  <body class="flex min-h-dvh flex-col">
+    <header th:replace="~{fragments/layout :: header}"></header>
+    <main id="conteudo" class="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:px-8">
+      <a th:href="@{/sensores}" class="text-sm text-brand-700">← Sensores</a>
+      <div class="mt-5 flex flex-wrap justify-between gap-4">
+        <div>
+          <p class="font-mono text-sm text-brand-700" th:text="${sensor.topic()}"></p>
+          <h1 class="mt-2 text-3xl font-semibold" th:text="${sensor.name}"></h1>
+          <p
+            class="mt-2 text-sm text-slate-500"
+            th:text="${sensor.type+' · '+(sensor.active?'Ativo':'Inativo')}"
+          ></p>
+        </div>
+        <a
+          th:if="${isAdmin}"
+          th:href="@{/admin/sensores/{id}/editar(id=${sensor.id})}"
+          class="button-secondary"
+        >
+          Editar configuração
+        </a>
+      </div>
+      <section class="mt-8 rounded-2xl border border-brand-200 bg-brand-50 p-7">
+        <p class="text-sm text-brand-700">Última leitura</p>
+        <p
+          class="mt-2 text-4xl font-semibold"
+          th:text="${latest==null?'Aguardando leitura':#numbers.formatDecimal(latest.convertedValue,1,2)+' '+latest.unit}"
+        ></p>
+        <time
+          th:if="${latest!=null}"
+          class="mt-2 block text-sm text-slate-500"
+          th:text="${#temporals.format(latest.measuredAt,'dd/MM/yyyy HH:mm:ss')}"
+        ></time>
+      </section>
+      <h2 class="mt-10 text-xl font-semibold">Histórico · 30 dias</h2>
+      <div class="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-brand-50">
+            <tr>
+              <th class="p-4">Medição (UTC)</th>
+              <th class="p-4">Valor bruto</th>
+              <th class="p-4">Valor calculado</th>
+              <th class="p-4">Calibração</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="r:${readings.content}" class="border-t">
+              <td
+                class="p-4"
+                th:text="${#temporals.format(r.measuredAt,'dd/MM/yyyy HH:mm:ss')}"
+              ></td>
+              <td
+                class="p-4"
+                th:text="${r.rawValue+(r.intervalMs==null?' ADC':' pulsos / '+r.intervalMs+' ms')}"
+              ></td>
+              <td class="p-4" th:text="${r.convertedValue+' '+r.unit}"></td>
+              <td class="p-4" th:text="${r.calibrationVersion}"></td>
+            </tr>
+            <tr th:if="${readings.empty}">
+              <td colspan="4" class="p-8 text-center text-slate-500">Ainda não há leituras.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+    <footer th:replace="~{fragments/layout :: footer}"></footer>
+  </body>
+</html>

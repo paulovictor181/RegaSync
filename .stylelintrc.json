@@ -1,0 +1,8 @@
+{
+  "extends": "stylelint-config-standard",
+  "rules": {
+    "at-rule-no-unknown": [true, { "ignoreAtRules": ["source", "theme", "apply"] }],
+    "import-notation": null,
+    "at-rule-prelude-no-invalid": [true, { "ignoreAtRules": ["apply"] }]
+  }
+}

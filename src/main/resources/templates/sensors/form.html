@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:replace="~{fragments/layout :: head('Configurar sensor')}"></head>
+  <body class="flex min-h-dvh flex-col">
+    <header th:replace="~{fragments/layout :: header}"></header>
+    <main id="conteudo" class="mx-auto w-full max-w-3xl flex-1 px-5 py-8 sm:px-8 sm:py-10">
+      <a th:href="@{/sensores}" class="text-sm font-semibold text-brand-700">
+        ← Voltar ao dashboard
+      </a>
+      <div class="mt-5">
+        <p class="text-xs font-semibold tracking-widest text-brand-600 uppercase">Sensores</p>
+        <h1
+          class="mt-2 text-3xl font-semibold tracking-tight text-slate-900"
+          th:text="${sensor == null ? 'Cadastrar sensor' : 'Configurar sensor'}"
+        >
+          Cadastrar sensor
+        </h1>
+        <p class="mt-2 text-sm leading-6 text-slate-500">
+          Informe a identificação do sensor e a calibração correspondente ao tipo escolhido.
+        </p>
+      </div>
+
+      <form
+        th:action="@{${sensor == null ? '/admin/sensores' : '/admin/sensores/' + sensor.id + '/editar'}}"
+        th:object="${sensorForm}"
+        method="post"
+        class="mt-7 space-y-5"
+      >
+        <div th:if="${#fields.hasErrors('*')}" class="notice-error">
+          <p th:each="e:${#fields.allErrors()}" th:text="${e}"></p>
+        </div>
+
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-7">
+          <h2 class="text-lg font-semibold text-slate-900">Identificação</h2>
+          <p class="mt-1 text-sm text-slate-500">
+            O tipo e o número definem o tópico usado pelo ESP32.
+          </p>
+
+          <div class="mt-5 space-y-5">
+            <label class="form-label">
+              Nome do sensor
+              <input
+                th:field="*{name}"
+                class="form-input"
+                placeholder="Ex.: Horta dos fundos"
+                required
+              />
+            </label>
+
+            <label class="form-label">
+              Tipo de sensor
+              <select
+                th:field="*{type}"
+                class="form-input"
+                th:disabled="${sensor != null}"
+                data-sensor-type
+                required
+              >
+                <option value="">Selecione o tipo</option>
+                <option
+                  th:each="t:${types}"
+                  th:value="${t}"
+                  th:text="${t == T(br.com.ufersa.regasync.sensor.model.SensorType).UMIDADE ? 'Umidade do solo' : 'Fluxo de água'}"
+                ></option>
+              </select>
+              <span th:if="${sensor != null}" class="mt-1 block text-xs font-normal text-slate-500">
+                O tipo não pode ser alterado depois que o tópico foi criado.
+              </span>
+            </label>
+            <input th:if="${sensor != null}" type="hidden" th:field="*{type}" />
+
+            <label class="form-label">
+              Número do sensor
+              <input
+                th:field="*{number}"
+                type="number"
+                min="1"
+                class="form-input"
+                placeholder="1"
+                th:readonly="${sensor != null}"
+                data-sensor-number
+                required
+              />
+              <span class="mt-1 block text-xs font-normal text-slate-500">
+                Tópico MQTT:
+                <strong
+                  data-topic-preview
+                  th:text="${sensor != null ? sensor.topic() : 'Selecione o tipo e informe o número'}"
+                ></strong>
+              </span>
+            </label>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-7">
+          <h2 class="text-lg font-semibold text-slate-900">Calibração</h2>
+          <p class="mt-1 text-sm text-slate-500">
+            Os campos mudam conforme o tipo de sensor selecionado.
+          </p>
+
+          <div
+            data-calibration-panel="UMIDADE"
+            hidden
+            class="mt-5 rounded-xl bg-brand-50 p-4 sm:p-5"
+          >
+            <h3 class="font-semibold text-brand-900">Calibração de umidade</h3>
+            <p class="mt-1 text-sm leading-6 text-slate-600">
+              Leia o valor ADC da sonda no ar seco e depois na condição totalmente molhada.
+            </p>
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+              <label class="form-label">
+                ADC em solo seco
+                <input
+                  th:field="*{dryAdc}"
+                  type="number"
+                  min="0"
+                  class="form-input"
+                  placeholder="Ex.: 3000"
+                  data-calibration-field
+                />
+              </label>
+              <label class="form-label">
+                ADC em solo molhado
+                <input
+                  th:field="*{wetAdc}"
+                  type="number"
+                  min="0"
+                  class="form-input"
+                  placeholder="Ex.: 1200"
+                  data-calibration-field
+                />
+              </label>
+            </div>
+          </div>
+
+          <div data-calibration-panel="FLUXO" hidden class="mt-5 rounded-xl bg-brand-50 p-4 sm:p-5">
+            <h3 class="font-semibold text-brand-900">Calibração de fluxo</h3>
+            <p class="mt-1 text-sm leading-6 text-slate-600">
+              Use o fator de calibração indicado pelo fabricante do medidor, em pulsos por litro.
+            </p>
+            <label class="form-label mt-4">
+              Pulsos por litro
+              <input
+                th:field="*{pulsesPerLiter}"
+                type="number"
+                min="0.0001"
+                step="0.0001"
+                class="form-input"
+                placeholder="Ex.: 450"
+                data-calibration-field
+              />
+            </label>
+          </div>
+
+          <p
+            data-calibration-empty
+            class="mt-5 rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500"
+          >
+            Selecione o tipo de sensor para exibir os campos de calibração.
+          </p>
+        </section>
+
+        <section
+          class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between sm:p-6"
+        >
+          <label class="flex items-start gap-3 text-sm text-slate-700">
+            <input th:field="*{active}" type="checkbox" class="mt-1" />
+            <span>
+              <span class="block font-semibold">Sensor ativo</span>
+              <span class="mt-1 block text-xs text-slate-500">
+                Sensores inativos não recebem leituras MQTT.
+              </span>
+            </span>
+          </label>
+          <button class="button-primary w-full sm:w-auto" type="submit">Salvar sensor</button>
+        </section>
+      </form>
+    </main>
+    <footer th:replace="~{fragments/layout :: footer}"></footer>
+    <script>
+      const typeSelect = document.querySelector("[data-sensor-type]");
+      const numberInput = document.querySelector("[data-sensor-number]");
+      const panels = [...document.querySelectorAll("[data-calibration-panel]")];
+      const emptyState = document.querySelector("[data-calibration-empty]");
+      const topicPreview = document.querySelector("[data-topic-preview]");
+
+      function updateSensorForm() {
+        const selectedType = typeSelect.value;
+        let visiblePanel = false;
+        for (const panel of panels) {
+          const visible = panel.dataset.calibrationPanel === selectedType;
+          panel.hidden = !visible;
+          visiblePanel ||= visible;
+          for (const field of panel.querySelectorAll("[data-calibration-field]")) {
+            field.disabled = !visible;
+            field.required = visible;
+            if (!visible) field.value = "";
+          }
+        }
+        emptyState.hidden = visiblePanel;
+
+        const prefix =
+          selectedType === "UMIDADE" ? "umidade" : selectedType === "FLUXO" ? "fluxo" : null;
+        topicPreview.textContent =
+          prefix && numberInput.value
+            ? `/${prefix}/${numberInput.value}`
+            : "Selecione o tipo e informe o número";
+      }
+
+      typeSelect.addEventListener("change", updateSensorForm);
+      numberInput.addEventListener("input", updateSensorForm);
+      updateSensorForm();
+    </script>
+  </body>
+</html>

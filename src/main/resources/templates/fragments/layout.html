@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:fragment="head(title)">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#296548" />
+    <title th:text="${title} + ' | RegaSync'">RegaSync</title>
+    <link rel="icon" type="image/svg+xml" th:href="@{/favicon.svg}" />
+    <link rel="stylesheet" th:href="@{/css/app.css}" />
+  </head>
+  <body>
+    <a
+      th:fragment="brand"
+      th:href="@{/}"
+      class="inline-flex items-center gap-3 rounded-lg"
+      aria-label="RegaSync, página inicial"
+    >
+      <img th:src="@{/favicon.svg}" width="42" height="42" alt="" />
+      <span class="text-2xl font-semibold tracking-tight">
+        Rega
+        <span class="font-normal">Sync</span>
+      </span>
+    </a>
+    <header th:fragment="header" class="border-b border-slate-200 bg-white">
+      <a
+        href="#conteudo"
+        class="sr-only rounded-lg bg-white p-3 focus:not-sr-only focus:absolute focus:z-10"
+      >
+        Ir para o conteúdo
+      </a>
+      <div
+        class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-8"
+      >
+        <div class="text-brand-900"><a th:replace="~{fragments/layout :: brand}"></a></div>
+        <nav aria-label="Menu principal" class="flex flex-wrap items-center gap-3">
+          <a
+            th:href="@{/sensores}"
+            class="rounded-lg px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+          >
+            Dashboard
+          </a>
+          <a
+            th:if="${isAdmin}"
+            th:href="@{/admin/usuarios/novo}"
+            class="rounded-lg px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+          >
+            Criar usuário
+          </a>
+          <form th:action="@{/logout}" method="post">
+            <button class="button-secondary" type="submit">
+              Sair da conta
+              <span aria-hidden="true">↗</span>
+            </button>
+          </form>
+        </nav>
+      </div>
+    </header>
+    <footer th:fragment="footer" class="px-5 py-8 text-center text-xs leading-5 text-slate-500">
+      RegaSync
+      <span aria-hidden="true">·</span>
+      Conectando sua rotina.
+    </footer>
+    <th:block th:fragment="field(label, name, type, autocomplete, placeholder)">
+      <label th:for="${name}" class="form-label" th:text="${label}">Campo</label>
+      <input
+        th:if="${type != 'password'}"
+        th:field="*{__${name}__}"
+        th:type="${type}"
+        th:autocomplete="${autocomplete}"
+        th:placeholder="${placeholder}"
+        class="form-input"
+        th:aria-invalid="${#fields.hasErrors(name)}"
+        th:aria-describedby="${#fields.hasErrors(name) ? name + '-error' : null}"
+        required
+      />
+      <input
+        th:if="${type == 'password'}"
+        th:id="${name}"
+        th:name="${name}"
+        type="password"
+        th:autocomplete="${autocomplete}"
+        th:placeholder="${placeholder}"
+        class="form-input"
+        minlength="8"
+        maxlength="72"
+        th:aria-invalid="${#fields.hasErrors(name)}"
+        th:aria-describedby="${#fields.hasErrors(name) ? name + '-error' : 'password-help'}"
+        required
+      />
+      <p
+        th:if="${#fields.hasErrors(name)}"
+        th:id="${name} + '-error'"
+        th:errors="*{__${name}__}"
+        class="mt-2 text-sm text-red-700"
+      >
+        Verifique este campo.
+      </p>
+    </th:block>
+  </body>
+</html>

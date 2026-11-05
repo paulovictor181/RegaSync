@@ -1,0 +1,17 @@
+{
+  "name": "regasync-ui",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/main/frontend/app.css -o ./src/main/resources/static/css/app.css --minify",
+    "watch:css": "tailwindcss -i ./src/main/frontend/app.css -o ./src/main/resources/static/css/app.css --watch",
+    "format:ui": "prettier --write \"src/main/resources/templates/**/*.html\" src/main/frontend/app.css",
+    "check:ui": "prettier --check \"src/main/resources/templates/**/*.html\" src/main/frontend/app.css && stylelint src/main/frontend/app.css"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.4",
+    "prettier": "3.9.10",
+    "stylelint": "18.0.0",
+    "stylelint-config-standard": "41.0.0",
+    "tailwindcss": "4.3.4"
+  }
+}

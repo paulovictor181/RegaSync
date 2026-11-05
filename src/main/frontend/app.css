@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@source "../resources/templates";
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", sans-serif;
+  --color-brand-50: #f2f8f4;
+  --color-brand-100: #dfede4;
+  --color-brand-200: #c0dbc9;
+  --color-brand-500: #3b8060;
+  --color-brand-600: #296548;
+  --color-brand-700: #20513b;
+  --color-brand-900: #15392c;
+}
+
+@layer base {
+  body {
+    @apply bg-brand-50 text-slate-800 antialiased;
+  }
+
+  button,
+  a,
+  input {
+    @apply focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600;
+  }
+}
+
+@layer components {
+  .form-input {
+    @apply mt-2 block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-xs placeholder:text-slate-400 focus:border-brand-600 focus:ring-2 focus:ring-brand-100 focus:outline-none;
+  }
+
+  .form-label {
+    @apply block text-sm font-semibold text-slate-700;
+  }
+
+  .button-primary {
+    @apply inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-brand-700;
+  }
+
+  .button-secondary {
+    @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50;
+  }
+
+  .notice-success {
+    @apply rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm leading-6 text-brand-900;
+  }
+
+  .notice-error {
+    @apply rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800;
+  }
+}

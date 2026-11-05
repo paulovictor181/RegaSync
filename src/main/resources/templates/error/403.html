@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:replace="~{fragments/layout :: head('Acesso negado')}"></head>
+  <body class="flex min-h-dvh items-center justify-center px-6 py-12">
+    <main
+      class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xs sm:p-12"
+    >
+      <p class="text-sm font-semibold tracking-widest text-brand-600">403</p>
+      <h1 class="mt-4 text-3xl font-semibold tracking-tight text-slate-900">Acesso restrito.</h1>
+      <p class="mt-4 text-sm leading-7 text-slate-500">
+        Sua conta não tem permissão para esta ação ou o formulário expirou. Volte à página inicial
+        para continuar.
+      </p>
+      <a th:href="@{/}" class="button-primary mt-8">
+        Voltar ao início
+        <span aria-hidden="true">→</span>
+      </a>
+    </main>
+  </body>
+</html>
