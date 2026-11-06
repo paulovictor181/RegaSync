@@ -51,7 +51,7 @@
         </form>
         <form
           id="manual-finish"
-          th:action="@{/sensores/{id}/rega-manual/{session}/finalizar(id=${sensor.id},session=${manual.id == null ? 0 : manual.id})}"
+          th:action="@{/sensores/{id}/rega-manual/{sessionId}/finalizar(id=${sensor.id},sessionId=${manual.id == null ? 0 : manual.id})}"
           method="post"
           class="mt-6"
           th:hidden="${!manual.canFinish}"
@@ -82,21 +82,24 @@
       <h2 class="mt-8 text-xl font-semibold text-slate-900">Histórico de regas manuais</h2>
       <section class="mt-4 grid gap-4 sm:grid-cols-2" aria-label="Histórico de regas manuais">
         <article
-          th:each="session:${history.content}"
+          th:each="irrigationSession:${history.content}"
           class="rounded-2xl border border-slate-200 bg-white p-5"
         >
-          <p class="text-sm font-semibold text-brand-700" th:text="${session.label}"></p>
+          <p class="text-sm font-semibold text-brand-700" th:text="${irrigationSession.label}"></p>
           <p
             class="mt-2 text-2xl font-semibold"
-            th:text="${#numbers.formatDecimal(session.liters,1,3)+' L'}"
+            th:text="${#numbers.formatDecimal(irrigationSession.liters,1,3)+' L'}"
           ></p>
-          <p class="mt-2 text-xs text-slate-500" th:text="${'Duração: '+session.seconds+' s'}"></p>
           <p
-            th:if="${session.startedAt != null}"
-            class="mt-1 text-xs text-slate-500"
-            th:text="${#temporals.format(session.startedAt,'dd/MM/yyyy HH:mm:ss')+' UTC'}"
+            class="mt-2 text-xs text-slate-500"
+            th:text="${'Duração: '+irrigationSession.seconds+' s'}"
           ></p>
-          <p th:if="${session.interrupted}" class="mt-2 text-xs text-red-700">
+          <p
+            th:if="${irrigationSession.startedAt != null}"
+            class="mt-1 text-xs text-slate-500"
+            th:text="${#temporals.format(irrigationSession.startedAt,'dd/MM/yyyy HH:mm:ss')+' UTC'}"
+          ></p>
+          <p th:if="${irrigationSession.interrupted}" class="mt-2 text-xs text-red-700">
             Volume parcial: o ESP32 reiniciou durante a medição.
           </p>
         </article>

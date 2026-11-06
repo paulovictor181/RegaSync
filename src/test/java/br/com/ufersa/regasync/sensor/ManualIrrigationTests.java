@@ -69,6 +69,20 @@ class ManualIrrigationTests extends IntegrationTestSupport {
         assertThat(service.view(flow.getId()).canStart()).isTrue();
         assertThat(service.pendingCommands()).isEmpty();
     }
+    @Test void pageRendersInEverySessionPhaseWithItsOwnHistory() throws Exception {
+        long id = service.start(flow.getId());
+        String page = "/sensores/"+flow.getId()+"/rega-manual";
+        mvc.perform(get(page)).andExpect(status().isOk());
+        service.acknowledge(ACK,ack(id,id*3-2,"pausada",100,550,true,false,false));
+        mvc.perform(get(page)).andExpect(status().isOk());
+        mvc.perform(post("/sensores/"+flow.getId()+"/rega-manual/"+id+"/finalizar").with(csrf()))
+                .andExpect(status().is3xxRedirection());
+        mvc.perform(get(page)).andExpect(status().isOk());
+        service.acknowledge(ACK,ack(id,id*3-1,"medida",100,775,true,false,false));
+        mvc.perform(get(page)).andExpect(status().isOk());
+        service.acknowledge(ACK,ack(id,id*3,"liberada",100,775,false,true,false));
+        mvc.perform(get(page)).andExpect(status().isOk());
+    }
     @Test void ignoresStaleCommandsWrongDevicesAndRegressiveCounters() {
         long id = service.start(flow.getId());
         service.acknowledge("/regasync/dispositivos/outro/rega-manual/estado", ack(id,id*3-2,"pausada",100,100,true,false,false));
