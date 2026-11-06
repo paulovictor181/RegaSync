@@ -20,6 +20,8 @@ public class Sensor {
     @Column(name="calibration_version", nullable=false) private int calibrationVersion;
     @Column(name="created_at", nullable=false, updatable=false) private Instant createdAt;
     @Column(name="updated_at", nullable=false) private Instant updatedAt;
+    @Column(name="humidity_applied_version") private Integer humidityAppliedVersion;
+    @Column(name="humidity_applied_at") private Instant humidityAppliedAt;
     protected Sensor() { }
     public Sensor(String name, SensorType type, int number, Integer dryAdc, Integer wetAdc, BigDecimal pulsesPerLiter) {
         this.name=name.strip(); this.type=type; this.number=number; this.active=true;
@@ -27,6 +29,14 @@ public class Sensor {
         this.calibrationVersion=1; this.createdAt=Instant.now(); this.updatedAt=createdAt;
     }
     public String topic() { return type.topic(number); }
+    public boolean isHumidityCalibrationConfirmed() {
+        return type == SensorType.UMIDADE && humidityAppliedVersion != null && humidityAppliedVersion == calibrationVersion;
+    }
+    public void confirmHumidityCalibration(int version, Instant at) {
+        if (type != SensorType.UMIDADE || version != calibrationVersion || (humidityAppliedAt != null && at.isBefore(humidityAppliedAt))) return;
+        humidityAppliedVersion = version;
+        humidityAppliedAt = at;
+    }
     public void update(String name, Integer dryAdc, Integer wetAdc, BigDecimal pulsesPerLiter, boolean active) {
         if (!java.util.Objects.equals(this.dryAdc,dryAdc) || !java.util.Objects.equals(this.wetAdc,wetAdc)
                 || !java.util.Objects.equals(this.pulsesPerLiter,pulsesPerLiter)) calibrationVersion++;

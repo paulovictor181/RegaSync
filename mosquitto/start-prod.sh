@@ -11,6 +11,7 @@ topic read /umidade/+
 topic read /fluxo/+
 topic write /regasync/dispositivos/+/config
 topic read /regasync/dispositivos/+/estado
+topic write /regasync/dispositivos/+/sensores/umidade/+/calibracao
 topic write /regasync/dispositivos/+/rega-manual/comando
 topic read /regasync/dispositivos/+/rega-manual/estado
 topic read \$SYS/broker/version
@@ -19,6 +20,7 @@ topic write /umidade/+
 topic write /fluxo/+
 topic read /regasync/dispositivos/$MQTT_ESP_USERNAME/config
 topic write /regasync/dispositivos/$MQTT_ESP_USERNAME/estado
+topic read /regasync/dispositivos/$MQTT_ESP_USERNAME/sensores/umidade/+/calibracao
 topic read /regasync/dispositivos/$MQTT_ESP_USERNAME/rega-manual/comando
 topic write /regasync/dispositivos/$MQTT_ESP_USERNAME/rega-manual/estado
 EOF

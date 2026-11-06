@@ -7,11 +7,13 @@ O sketch em `sketch_sep27a/` adapta o circuito original: GPIO 32 (umidade), GPIO
 1. Na Arduino IDE, instale o core **esp32** da Espressif e as bibliotecas **ArduinoMqttClient** (verificado com 0.1.8) e **ArduinoJson** (verificado com 7.4.3).
 2. Abra `sketch_sep27a/sketch_sep27a.ino`. Copie `secrets.example.h` para `secrets.h` na mesma pasta e preencha Wi-Fi, IP/hostname da VPS, usuario `MQTT_ESP_USERNAME` e senha `MQTT_ESP_PASSWORD`. O host deve conter apenas IP/hostname. Mantenha TLS ativo e porta 8883 para a VPS.
 3. Selecione a placa e porta USB corretas e envie pela IDE. A verificacao de compilacao foi feita com **ESP32 Dev Module**, core 3.3.12. O envio USB e a validacao dos sensores dependem da placa conectada.
-4. No RegaSync, cadastre umidade numero 1 (ADC seco 4095 e molhado 1690) e fluxo numero 1 (450 pulsos/litro inicialmente), ou ajuste os numeros/calibracao no header para corresponder aos cadastros. Depois de calibrar o fluxo pelo copo de 500 ml, atualize o cadastro do sensor com o fator calculado pelo ESP. O comando MQTT de configuracao nao altera a calibracao.
+4. No RegaSync, cadastre umidade numero 1 e fluxo numero 1, ou ajuste os numeros no header para corresponder aos cadastros. A faixa inicial de umidade do header e 4095/1690; depois de conectado, a placa recebe a [faixa salva no site](../docs/humidity-calibration.md) e a persiste. Configure referencias reais de solo seco/molhado no cadastro. O fluxo usa inicialmente 450 pulsos/litro; depois de calibrar pelo copo de 500 ml, atualize o cadastro com o fator calculado pelo ESP.
 
 `secrets.h` e ignorado pelo Git. O exemplo tem marcadores que deixam a rede desativada ate serem preenchidos. As raizes publicas ISRG X1/X2 em `trusted_roots.h` permitem validar certificados Let's Encrypt sem desativar verificacao TLS. O firmware sincroniza UTC via NTP antes de iniciar TLS/publicar leituras. A rede precisa permitir DNS/NTP e saida TCP 8883.
 
 ## Leituras
+
+Para consultar a conexao no Monitor Serial, envie `STATUS_REDE`. Para conferir a faixa de umidade aplicada, envie `STATUS_UMIDADE`. Use 115200 baud e Nova linha. Essas consultas funcionam a qualquer momento, sem reiniciar a placa.
 
 O site tambem oferece [sessoes de rega manual com pausa confirmada do automatico](../docs/manual-irrigation.md), no card do sensor de fluxo. Essa funcao exige o sketch atualizado com `manual_irrigation.h` e as novas ACLs do broker.
 

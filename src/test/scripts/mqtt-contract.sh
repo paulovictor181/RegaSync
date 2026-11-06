@@ -60,4 +60,14 @@ mosquitto_pub -h 127.0.0.1 -u "$MQTT_ESP_USERNAME" -P "$MQTT_ESP_PASSWORD" \
   -t "$manual_state" -q 1 -r -m '{"fase":"pausada"}'
 received=$(mosquitto_sub -h 127.0.0.1 -u "$MQTT_SERVER_USERNAME" -P "$MQTT_SERVER_PASSWORD" -t "$manual_state" -C 1 -W 3)
 [ "$received" = '{"fase":"pausada"}' ] || { echo 'FAIL: confirmacao manual nao chegou ao servidor'; exit 1; }
-echo 'PASS: broker inicia sem certificado, configuracoes e comandos manuais retidos chegam ao ESP, confirmacoes chegam ao servidor e ACLs bloqueiam acessos indevidos.'
+humidity_topic="/regasync/dispositivos/$MQTT_ESP_USERNAME/sensores/umidade/1/calibracao"
+humidity_payload='{"versao":1,"sensorNumero":1,"adcSeco":3000,"adcMolhado":600}'
+mosquitto_pub -h 127.0.0.1 -u "$MQTT_SERVER_USERNAME" -P "$MQTT_SERVER_PASSWORD" \
+  -t "$humidity_topic" -q 1 -r -m "$humidity_payload"
+received=$(mosquitto_sub -h 127.0.0.1 -u "$MQTT_ESP_USERNAME" -P "$MQTT_ESP_PASSWORD" -t "$humidity_topic" -C 1 -W 3)
+[ "$received" = "$humidity_payload" ] || { echo 'FAIL: faixa de umidade nao chegou ao ESP'; exit 1; }
+mosquitto_pub -h 127.0.0.1 -V mqttv5 -u "$MQTT_ESP_USERNAME" -P "$MQTT_ESP_PASSWORD" \
+  -t "$humidity_topic" -q 1 -r -m '{}' > /dev/null 2>&1 || true
+received=$(mosquitto_sub -h 127.0.0.1 -u "$MQTT_ESP_USERNAME" -P "$MQTT_ESP_PASSWORD" -t "$humidity_topic" -C 1 -W 3)
+[ "$received" = "$humidity_payload" ] || { echo 'FAIL: ESP conseguiu alterar a faixa de umidade no broker'; exit 1; }
+echo 'PASS: broker inicia sem certificado, calibracao de umidade/configuracoes/comandos retidos chegam ao ESP, confirmacoes chegam ao servidor e ACLs bloqueiam acessos indevidos.'

@@ -105,7 +105,8 @@
           >
             <h3 class="font-semibold text-brand-900">Calibração de umidade</h3>
             <p class="mt-1 text-sm leading-6 text-slate-600">
-              Leia o valor ADC da sonda no ar seco e depois na condição totalmente molhada.
+              Use as leituras estáveis da sonda em solo seco e em solo bem molhado. Os valores
+              precisam ser diferentes e estar entre 0 e 4095.
             </p>
             <div class="mt-4 grid gap-4 sm:grid-cols-2">
               <label class="form-label">
@@ -114,6 +115,7 @@
                   th:field="*{dryAdc}"
                   type="number"
                   min="0"
+                  max="4095"
                   class="form-input"
                   placeholder="Ex.: 3000"
                   data-calibration-field
@@ -125,12 +127,20 @@
                   th:field="*{wetAdc}"
                   type="number"
                   min="0"
+                  max="4095"
                   class="form-input"
                   placeholder="Ex.: 1200"
                   data-calibration-field
                 />
               </label>
             </div>
+            <p class="mt-3 text-xs leading-5 text-slate-500">
+              Ao salvar, o sistema envia a faixa ao ESP32 pelo MQTT. Ela fica salva na placa e passa
+              a ser usada no cálculo da umidade e no controle automático.
+            </p>
+            <th:block th:if="${sensor != null}">
+              <div th:replace="~{sensors/calibration-status :: status(${sensor})}"></div>
+            </th:block>
           </div>
 
           <div data-calibration-panel="FLUXO" hidden class="mt-5 rounded-xl bg-brand-50 p-4 sm:p-5">
@@ -177,6 +187,7 @@
       </form>
     </main>
     <footer th:replace="~{fragments/layout :: footer}"></footer>
+    <script th:src="@{/js/sensor-calibration.js}" defer></script>
     <script>
       const typeSelect = document.querySelector("[data-sensor-type]");
       const numberInput = document.querySelector("[data-sensor-number]");

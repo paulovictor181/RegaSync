@@ -6,9 +6,11 @@
 #include <Preferences.h>
 #include <esp_system.h>
 #include <time.h>
+#include <atomic>
 #include "device_config.h"
 #include "flow_calibration.h"
 #include "manual_irrigation.h"
+#include "humidity_calibration.h"
 #include "trusted_roots.h"
 #if __has_include("secrets.h")
 #include "secrets.h"
@@ -44,6 +46,23 @@ struct DeviceState {
   FlowCalibrationStatus calibrationStatus;
   uint32_t calibrationPulses;
   bool irrigationPaused;
+  HumidityCalibration humidityCalibration;
+};
+
+struct NetworkStatus {
+  char phase[64];
+  char localIp[16];
+  bool configured;
+  bool wifiConnected;
+  bool clockSynced;
+  bool mqttConnected;
+  bool hasPublished;
+  int wifiStatus;
+  int rssi;
+  int lastMqttError;
+  uint16_t lastWifiReason;
+  uint32_t lastPublicationMs;
+  uint32_t updatedMs;
 };
 
 RemoteConfig settings = {0, 5000, 38, 45, true};
@@ -53,6 +72,11 @@ QueueHandle_t configQueue;
 QueueHandle_t stateQueue;
 QueueHandle_t manualCommandQueue;
 QueueHandle_t manualStateQueue;
+QueueHandle_t networkStatusQueue;
+QueueHandle_t humidityCalibrationQueue;
+HumidityCalibration humidityCalibration = {0, ADC_SECO, ADC_MOLHADO};
+NetworkStatus networkStatus = {};
+std::atomic<uint16_t> lastWifiReason{0};
 ManualRecord manualRecord = {};
 bool manualHold = false;
 uint32_t manualPauseAt = 0;
@@ -82,6 +106,43 @@ String moistureTopic;
 String flowTopic;
 String manualCommandTopic;
 String manualStateTopic;
+String humidityCalibrationTopic;
+
+// Executado somente pela tarefa de rede. O Serial consulta uma copia via fila.
+void updateNetworkStatus(const char* phase) {
+  if (strcmp(networkStatus.phase, phase) != 0) Serial.printf("[REDE] %s\n", phase);
+  strlcpy(networkStatus.phase, phase, sizeof(networkStatus.phase));
+  networkStatus.wifiStatus = WiFi.status();
+  networkStatus.wifiConnected = networkStatus.wifiStatus == WL_CONNECTED;
+  networkStatus.clockSynced = time(nullptr) >= 1735689600;
+  networkStatus.mqttConnected = networkStatus.wifiConnected && mqtt.connected();
+  networkStatus.lastWifiReason = lastWifiReason.load();
+  networkStatus.rssi = networkStatus.wifiConnected ? WiFi.RSSI() : 0;
+  String ip = networkStatus.wifiConnected ? WiFi.localIP().toString() : "sem IP";
+  strlcpy(networkStatus.localIp, ip.c_str(), sizeof(networkStatus.localIp));
+  networkStatus.updatedMs = millis();
+  xQueueOverwrite(networkStatusQueue, &networkStatus);
+}
+
+void printNetworkStatus() {
+  NetworkStatus status;
+  if (xQueuePeek(networkStatusQueue, &status, 0) != pdTRUE) {
+    Serial.println("[REDE] Tarefa de rede ainda nao iniciou.");
+    return;
+  }
+  Serial.printf("[REDE] Etapa: %s (atualizado ha %lu ms)\n", status.phase, (unsigned long)(millis() - status.updatedMs));
+  Serial.printf("[REDE] Credenciais preenchidas: %s\n", status.configured ? "SIM" : "NAO; confira secrets.h");
+  Serial.printf("[REDE] Wi-Fi: %s | status=%d | ultimo motivo de desconexao=%u\n",
+                status.wifiConnected ? "CONECTADO" : "DESCONECTADO", status.wifiStatus, status.lastWifiReason);
+  if (status.wifiConnected) Serial.printf("[REDE] IP local: %s | sinal: %d dBm\n", status.localIp, status.rssi);
+  Serial.printf("[REDE] Relogio UTC/NTP: %s\n", status.clockSynced ? "SINCRONIZADO" : "AGUARDANDO");
+  Serial.printf("[REDE] MQTT: %s | ultimo erro=%d | TLS=%s | porta=%u\n", status.mqttConnected ? "CONECTADO" : "DESCONECTADO", status.lastMqttError, MQTT_USE_TLS ? "SIM" : "NAO", MQTT_PORT);
+  if (status.hasPublished) Serial.printf("[REDE] Ultima leitura confirmada pelo broker ha %lu segundos.\n", (unsigned long)((millis() - status.lastPublicationMs) / 1000));
+  else Serial.println("[REDE] Nenhuma leitura confirmada pelo broker desde o boot.");
+  if (!status.wifiConnected) Serial.println("[REDE] Confira SSID (maiusculas/minusculas), senha e rede 2,4 GHz.");
+  else if (!status.clockSynced) Serial.println("[REDE] Wi-Fi conectado, aguardando NTP; TLS e leituras precisam de horario UTC.");
+  else if (!status.mqttConnected) Serial.println("[REDE] Confira broker, porta 8883, certificado TLS e credenciais MQTT do ESP.");
+}
 
 void IRAM_ATTR countPulse() {
   portENTER_CRITICAL_ISR(&pulseMux);
@@ -208,6 +269,8 @@ void printCalibrationHelp() {
   Serial.println("  FINALIZAR_FLUXO  - ao atingir 500 ml, DESLIGA e salva a calibracao");
   Serial.println("  CANCELAR_FLUXO   - DESLIGA e descarta a coleta");
   Serial.println("  STATUS_FLUXO     - mostra fator e estado da calibracao");
+  Serial.println("  STATUS_REDE      - mostra Wi-Fi, UTC, MQTT e ultimo envio confirmado");
+  Serial.println("  STATUS_UMIDADE   - mostra faixa ADC e versao recebida do site");
   Serial.println("  RETOMAR_REGA     - libera novamente a rega automatica configurada");
   Serial.println("  AJUDA            - mostra estes comandos");
 }
@@ -236,6 +299,13 @@ void handleSerialCommand(String command) {
   command.toUpperCase();
   if (command == "AJUDA") {
     printCalibrationHelp();
+  } else if (command == "STATUS_REDE") {
+    printNetworkStatus();
+  } else if (command == "STATUS_UMIDADE") {
+    Serial.printf("[UMIDADE] Seco=%d | Molhado=%d | Calibracao=v%lu | GPIO=%d\n",
+                  humidityCalibration.dryAdc, humidityCalibration.wetAdc, (unsigned long)humidityCalibration.version, PINO_UMIDADE);
+    DeviceState latest;
+    if (xQueuePeek(stateQueue, &latest, 0) == pdTRUE) Serial.printf("[UMIDADE] Ultimo ADC=%d | Umidade=%d%%\n", latest.adc, latest.humidity);
   } else if (command == "CALIBRAR_FLUXO") {
     if (manualHold) { Serial.println("Rega manual ativa no site. Finalize a sessao antes de calibrar."); return; }
     if (flowCalibration.active()) {
@@ -331,8 +401,25 @@ bool validConfig(const RemoteConfig& config) {
 }
 
 // Aceita somente snapshots completos. Versoes antigas sao ignoradas no loop.
+void receiveHumidityCalibration(int messageSize) {
+  if (messageSize <= 0 || messageSize > 512) { while (mqtt.available()) mqtt.read(); return; }
+  String payload;
+  while (mqtt.available()) payload += static_cast<char>(mqtt.read());
+  JsonDocument doc;
+  if (deserializeJson(doc, payload) || !doc.is<JsonObject>() || doc.size() != 4 ||
+      !doc["versao"].is<uint32_t>() || !doc["sensorNumero"].is<int>() ||
+      !doc["adcSeco"].is<int>() || !doc["adcMolhado"].is<int>() || doc["sensorNumero"].as<int>() != NUMERO_SENSOR_UMIDADE) return;
+  HumidityCalibration candidate = {doc["versao"].as<uint32_t>(), doc["adcSeco"].as<int>(), doc["adcMolhado"].as<int>()};
+  if (candidate.version == 0 || !validHumidityCalibration(candidate)) {
+    Serial.println("[UMIDADE] Calibracao rejeitada: valores precisam ser distintos e entre 0 e 4095.");
+    return;
+  }
+  xQueueOverwrite(humidityCalibrationQueue, &candidate);
+}
+
 void receiveConfig(int messageSize) {
   if (mqtt.messageTopic() == manualCommandTopic) { receiveManualCommand(messageSize); return; }
+  if (mqtt.messageTopic() == humidityCalibrationTopic) { receiveHumidityCalibration(messageSize); return; }
   if (mqtt.messageTopic() != configTopic || messageSize <= 0 || messageSize > 512) {
     while (mqtt.available()) mqtt.read();
     return;
@@ -407,6 +494,10 @@ bool sendState(const DeviceState& state) {
   document["releLigado"] = state.relayOn;
   document["umidade"] = state.humidity;
   document["adc"] = state.adc;
+  document["sensorUmidadeNumero"] = NUMERO_SENSOR_UMIDADE;
+  document["versaoCalibracaoUmidade"] = state.humidityCalibration.version;
+  document["adcSeco"] = state.humidityCalibration.dryAdc;
+  document["adcMolhado"] = state.humidityCalibration.wetAdc;
   document["vazaoLmin"] = state.flow;
   document["volumeDesdeBootLitros"] = state.volume;
   document["pulsosPorLitro"] = state.pulsesPerLiter;
@@ -441,12 +532,23 @@ bool sendManualState(const ManualSnapshot& state) {
 
 void networkTask(void*) {
   if (String(WIFI_SSID).startsWith("PREENCHA") || String(MQTT_HOST).startsWith("PREENCHA") ||
-      String(MQTT_PASSWORD).startsWith("PREENCHA") || strlen(MQTT_USER) == 0) {
-    Serial.println("Rede desativada: preencha secrets.h antes de enviar dados.");
+      String(WIFI_PASSWORD).startsWith("PREENCHA") || String(MQTT_PASSWORD).startsWith("PREENCHA") ||
+      strlen(WIFI_SSID) == 0 || strlen(MQTT_HOST) == 0 || strlen(MQTT_USER) == 0) {
+    updateNetworkStatus("Rede desativada: preencha secrets.h");
     vTaskDelete(nullptr);
   }
+  networkStatus.configured = true;
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+      lastWifiReason.store(info.wifi_sta_disconnected.reason);
+      Serial.printf("[REDE] Wi-Fi desconectado; motivo=%u.\n", info.wifi_sta_disconnected.reason);
+    } else if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
+      Serial.println("[REDE] Wi-Fi conectado e endereco IP recebido.");
+    }
+  });
+  updateNetworkStatus("Conectando ao Wi-Fi");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   configTime(0, 0, "pool.ntp.org", "time.google.com");
   secureTransport.setCACert(TRUSTED_ROOTS);
@@ -464,10 +566,11 @@ void networkTask(void*) {
   Telemetry pending = {};
   bool hasPending = false;
   bool moistureSent = false;
-  uint32_t lastWifiAttempt = millis();
+  uint32_t lastNetworkLog = millis() - 10000;
   uint32_t lastMqttAttempt = millis() - 5000;
   uint32_t lastStateSent = 0;
   uint32_t acknowledgedVersion = UINT32_MAX;
+  uint32_t acknowledgedHumidityVersion = UINT32_MAX;
   uint64_t acknowledgedManualVersion = UINT64_MAX;
   int acknowledgedManualPhase = -1;
   uint32_t lastManualSent = 0;
@@ -478,37 +581,63 @@ void networkTask(void*) {
     uint32_t now = millis();
     if (WiFi.status() != WL_CONNECTED) {
       mqtt.stop();
-      if (now - lastWifiAttempt >= 10000) {
-        lastWifiAttempt = now;
-        WiFi.reconnect();
+      updateNetworkStatus("Aguardando conexao Wi-Fi");
+      if (now - lastNetworkLog >= 10000) {
+        lastNetworkLog = now;
+        Serial.printf("[REDE] Wi-Fi ainda sem conexao: status=%d, motivo=%u. Confira SSID/senha/rede 2,4 GHz.\n", networkStatus.wifiStatus, networkStatus.lastWifiReason);
       }
+      // A biblioteca cuida da reconexao. Nao sobrepor WiFi.reconnect() a uma tentativa ativa.
       vTaskDelay(pdMS_TO_TICKS(100));
       continue;
     }
     // TLS e timestamps precisam de um relogio sincronizado. A rega e independente.
     if (time(nullptr) < 1735689600) {
+      updateNetworkStatus("Wi-Fi conectado; aguardando relogio UTC/NTP");
+      if (now - lastNetworkLog >= 10000) {
+        lastNetworkLog = now;
+        Serial.println("[REDE] Aguardando NTP. Confira se a rede permite DNS e NTP (UDP 123).");
+      }
       vTaskDelay(pdMS_TO_TICKS(100));
       continue;
     }
     if (!mqtt.connected()) {
+      updateNetworkStatus("Wi-Fi e UTC prontos; aguardando conexao MQTT");
       if (now - lastMqttAttempt < 5000) {
         vTaskDelay(pdMS_TO_TICKS(50));
         continue;
       }
       lastMqttAttempt = now;
-      if (!mqtt.connect(MQTT_HOST, MQTT_PORT) || !mqtt.subscribe(configTopic, 1) || !mqtt.subscribe(manualCommandTopic, 1)) {
+      updateNetworkStatus("Conectando ao broker MQTT");
+      if (!mqtt.connect(MQTT_HOST, MQTT_PORT)) {
+        networkStatus.lastMqttError = mqtt.connectError();
         Serial.printf("MQTT indisponivel (codigo %d); nova tentativa em 5 s.\n", mqtt.connectError());
+        if (MQTT_USE_TLS) {
+          char error[128];
+          int code = secureTransport.lastError(error, sizeof(error));
+          if (code != 0) Serial.printf("[REDE] TLS: erro %d: %s\n", code, error);
+        }
         mqtt.stop();
+        updateNetworkStatus("Falha na conexao MQTT; tentando novamente");
         continue;
       }
+      if (!mqtt.subscribe(configTopic, 1) || !mqtt.subscribe(manualCommandTopic, 1) || !mqtt.subscribe(humidityCalibrationTopic, 1)) {
+        networkStatus.lastMqttError = -10;
+        Serial.println("[REDE] Falha ao assinar topicos MQTT; confira as ACLs do Mosquitto.");
+        mqtt.stop();
+        updateNetworkStatus("Falha na assinatura dos topicos MQTT");
+        continue;
+      }
+      networkStatus.lastMqttError = 0;
       Serial.println("MQTT conectado; assinatura de configuracao ativa.");
       acknowledgedVersion = UINT32_MAX;
+      acknowledgedHumidityVersion = UINT32_MAX;
       acknowledgedManualVersion = UINT64_MAX;
       acknowledgedCalibrationStatus = -1;
       moistureSent = false;  // Reenvio usa o mesmo id, deduplicado pelo servidor.
     }
     mqtt.poll();
-    if (!mqtt.connected()) continue;
+    if (!mqtt.connected()) { updateNetworkStatus("Conexao MQTT interrompida"); continue; }
+    updateNetworkStatus("Wi-Fi, UTC e MQTT conectados");
 
     ManualSnapshot manual;
     if (xQueuePeek(manualStateQueue, &manual, 0) == pdTRUE && manual.record.session != 0 &&
@@ -522,6 +651,7 @@ void networkTask(void*) {
     DeviceState state;
     if (xQueuePeek(stateQueue, &state, 0) == pdTRUE &&
         (acknowledgedVersion != state.config.version ||
+         acknowledgedHumidityVersion != state.humidityCalibration.version ||
          acknowledgedCalibrationStatus != static_cast<int>(state.calibrationStatus) ||
          acknowledgedPause != state.irrigationPaused || now - lastStateSent >= 10000)) {
       if (!sendState(state)) {
@@ -529,6 +659,7 @@ void networkTask(void*) {
         continue;
       }
       acknowledgedVersion = state.config.version;
+      acknowledgedHumidityVersion = state.humidityCalibration.version;
       acknowledgedCalibrationStatus = static_cast<int>(state.calibrationStatus);
       acknowledgedPause = state.irrigationPaused;
       lastStateSent = now;
@@ -541,9 +672,17 @@ void networkTask(void*) {
     if (hasPending) {
       if (!moistureSent) moistureSent = sendReading(pending, true);
       if (!moistureSent || !sendReading(pending, false)) {
+        networkStatus.lastMqttError = -11;
+        Serial.println("[REDE] Publicacao das leituras nao confirmada; sera repetida apos reconectar.");
         mqtt.stop();
+        updateNetworkStatus("Falha ao confirmar publicacao MQTT");
       } else {
         hasPending = false;
+        networkStatus.hasPublished = true;
+        networkStatus.lastPublicationMs = millis();
+        networkStatus.lastMqttError = 0;
+        Serial.println("[REDE] Leituras de umidade e fluxo confirmadas pelo broker (QoS 1).");
+        updateNetworkStatus("Wi-Fi, UTC e MQTT conectados");
       }
     }
     vTaskDelay(pdMS_TO_TICKS(20));
@@ -570,6 +709,11 @@ void setup() {
   double storedFactor = preferences.getDouble("flowPpl", PULSOS_POR_LITRO);
   if (FlowCalibration::validFactor(storedFactor)) pulsesPerLiter = storedFactor;
   irrigationPaused = preferences.getBool("calPause", false);
+  if (preferences.getBytesLength("humCal") == sizeof(humidityCalibration)) {
+    HumidityCalibration stored;
+    preferences.getBytes("humCal", &stored, sizeof(stored));
+    if (validHumidityCalibration(stored)) humidityCalibration = stored;
+  }
   bootNumber = preferences.getULong64("boot", 0) + 1;
   preferences.putULong64("boot", bootNumber);
   char randomId[17];
@@ -579,6 +723,7 @@ void setup() {
   stateTopic = String("/regasync/dispositivos/") + MQTT_USER + "/estado";
   manualCommandTopic = String("/regasync/dispositivos/") + MQTT_USER + "/rega-manual/comando";
   manualStateTopic = String("/regasync/dispositivos/") + MQTT_USER + "/rega-manual/estado";
+  humidityCalibrationTopic = String("/regasync/dispositivos/") + MQTT_USER + "/sensores/umidade/" + NUMERO_SENSOR_UMIDADE + "/calibracao";
   moistureTopic = String("/umidade/") + NUMERO_SENSOR_UMIDADE;
   flowTopic = String("/fluxo/") + NUMERO_SENSOR_FLUXO;
   telemetryQueue = xQueueCreate(30, sizeof(Telemetry));
@@ -586,7 +731,9 @@ void setup() {
   stateQueue = xQueueCreate(1, sizeof(DeviceState));
   manualCommandQueue = xQueueCreate(1, sizeof(ManualCommand));
   manualStateQueue = xQueueCreate(1, sizeof(ManualSnapshot));
-  if (!telemetryQueue || !configQueue || !stateQueue || !manualCommandQueue || !manualStateQueue) {
+  networkStatusQueue = xQueueCreate(1, sizeof(NetworkStatus));
+  humidityCalibrationQueue = xQueueCreate(1, sizeof(HumidityCalibration));
+  if (!telemetryQueue || !configQueue || !stateQueue || !manualCommandQueue || !manualStateQueue || !networkStatusQueue || !humidityCalibrationQueue) {
     Serial.println("Memoria insuficiente; rele permanece desligado.");
     for (;;) delay(1000);
   }
@@ -606,11 +753,22 @@ void setup() {
   previousMeasurement = previousPublication = millis();
   Serial.println("RegaSync iniciado: controle local + telemetria/configuracao MQTT.");
   Serial.printf("Fator de fluxo carregado: %.4f pulsos/litro.\n", pulsesPerLiter);
+  Serial.printf("[UMIDADE] Faixa carregada: seco=%d, molhado=%d, versao=%lu.\n", humidityCalibration.dryAdc, humidityCalibration.wetAdc, (unsigned long)humidityCalibration.version);
   printCalibrationHelp();
   if (irrigationPaused) Serial.println("Rega pausada por calibracao anterior. Envie RETOMAR_REGA quando estiver pronto.");
 }
 
 void loop() {
+  HumidityCalibration candidateCalibration;
+  if (xQueueReceive(humidityCalibrationQueue, &candidateCalibration, 0) == pdTRUE && candidateCalibration.version > humidityCalibration.version) {
+    if (preferences.putBytes("humCal", &candidateCalibration, sizeof(candidateCalibration)) == sizeof(candidateCalibration)) {
+      humidityCalibration = candidateCalibration;
+      Serial.printf("[UMIDADE] Faixa recebida do site e salva: seco=%d, molhado=%d, versao=%lu.\n",
+                    humidityCalibration.dryAdc, humidityCalibration.wetAdc, (unsigned long)humidityCalibration.version);
+    } else {
+      Serial.println("[UMIDADE] Falha ao salvar faixa; mantendo calibracao anterior.");
+    }
+  }
   ManualCommand command;
   if (xQueueReceive(manualCommandQueue, &command, 0) == pdTRUE) processManualCommand(command);
   settleManualPause();
@@ -660,13 +818,13 @@ void loop() {
     delay(2);
   }
   int adc = sum / NUM_LEITURAS;
-  int humidity = constrain(static_cast<int>(100.0 * (ADC_SECO - adc) / (ADC_SECO - ADC_MOLHADO)), 0, 100);
+  int humidity = humidityPercent(adc, humidityCalibration);
   if (!flowCalibration.active()) {
     relayOn = !manualHold && !irrigationPaused && settings.automaticWatering && humidity < (relayOn ? settings.humidityOff : settings.humidityOn);
   }
   digitalWrite(PINO_RELE, relayOn ? RELE_LIGADO : RELE_DESLIGADO);
   DeviceState state = {settings, humidity, adc, relayOn, flow, totalVolume,
-                       pulsesPerLiter, flowCalibration.status(), calibrationPulses(), irrigationPaused};
+                       pulsesPerLiter, flowCalibration.status(), calibrationPulses(), irrigationPaused, humidityCalibration};
   xQueueOverwrite(stateQueue, &state);
   updateManualSnapshot();
 

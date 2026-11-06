@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <section
+      th:fragment="status(sensor)"
+      th:if="${sensor.type == T(br.com.ufersa.regasync.sensor.model.SensorType).UMIDADE}"
+      class="mt-5 rounded-xl border border-brand-200 bg-brand-50 p-4"
+    >
+      <p class="text-sm font-semibold text-brand-900">Última faixa de umidade salva</p>
+      <p
+        class="mt-1 text-sm text-slate-600"
+        data-humidity-range
+        th:text="${'ADC seco: '+sensor.dryAdc+' · ADC molhado: '+sensor.wetAdc}"
+      ></p>
+      <p
+        class="mt-2 text-xs text-brand-700"
+        data-humidity-calibration-status
+        th:data-sensor-id="${sensor.id}"
+        th:text="${sensor.humidityCalibrationConfirmed ? 'Faixa aplicada no ESP32.' : 'Aguardando confirmação do ESP32. A placa precisa estar conectada.'}"
+      ></p>
+    </section>
+  </body>
+</html>

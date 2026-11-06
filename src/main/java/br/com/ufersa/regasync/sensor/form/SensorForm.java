@@ -11,8 +11,8 @@ public class SensorForm {
     @NotBlank @Size(max=120) private String name;
     @NotNull private SensorType type;
     @NotNull @Positive private Integer number;
-    private Integer dryAdc;
-    private Integer wetAdc;
+    @Min(0) @Max(4095) private Integer dryAdc;
+    @Min(0) @Max(4095) private Integer wetAdc;
     @DecimalMin("0.0001") @Digits(integer=8,fraction=4) private BigDecimal pulsesPerLiter;
     private boolean active=true;
     public void setName(String name) { this.name=name==null?null:name.strip(); }

@@ -65,6 +65,8 @@ Todos os formulários usam CSRF, senhas são armazenadas com BCrypt e autorizaç
 
 ## Sensores e MQTT
 
+Os valores ADC seco/molhado salvos no site agora sao enviados ao ESP32, com confirmacao de aplicacao na tela. Consulte [docs/humidity-calibration.md](docs/humidity-calibration.md) para atualizar servidor/broker/firmware e usar os comandos Serial `STATUS_REDE` e `STATUS_UMIDADE`.
+
 Para medir a agua do ramal manual com pausa do automatico, use **Rega manual** no card de fluxo. O fluxo completo e os passos de atualizacao estao em [docs/manual-irrigation.md](docs/manual-irrigation.md).
 
 O firmware integrado ao contrato do sistema e os comandos para configurar o ESP32 via MQTT estao em [firmware/README.md](firmware/README.md).

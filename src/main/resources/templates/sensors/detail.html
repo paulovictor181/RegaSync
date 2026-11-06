@@ -34,6 +34,7 @@
           th:text="${#temporals.format(latest.measuredAt,'dd/MM/yyyy HH:mm:ss')}"
         ></time>
       </section>
+      <div th:replace="~{sensors/calibration-status :: status(${sensor})}"></div>
       <h2 class="mt-10 text-xl font-semibold">Histórico · 30 dias</h2>
       <a
         th:if="${sensor.type == T(br.com.ufersa.regasync.sensor.model.SensorType).FLUXO}"
@@ -73,5 +74,6 @@
       </div>
     </main>
     <footer th:replace="~{fragments/layout :: footer}"></footer>
+    <script th:src="@{/js/sensor-calibration.js}" defer></script>
   </body>
 </html>
