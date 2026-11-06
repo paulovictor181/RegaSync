@@ -8,6 +8,7 @@
 #include <time.h>
 #include "device_config.h"
 #include "flow_calibration.h"
+#include "manual_irrigation.h"
 #include "trusted_roots.h"
 #if __has_include("secrets.h")
 #include "secrets.h"
@@ -50,12 +51,18 @@ Preferences preferences;
 QueueHandle_t telemetryQueue;
 QueueHandle_t configQueue;
 QueueHandle_t stateQueue;
+QueueHandle_t manualCommandQueue;
+QueueHandle_t manualStateQueue;
+ManualRecord manualRecord = {};
+bool manualHold = false;
+uint32_t manualPauseAt = 0;
 WiFiClient plainTransport;
 WiFiClientSecure secureTransport;
 MqttClient mqtt(MQTT_USE_TLS ? static_cast<Client&>(secureTransport)
                            : static_cast<Client&>(plainTransport));
 portMUX_TYPE pulseMux = portMUX_INITIALIZER_UNLOCKED;
 volatile uint32_t pulseCounter = 0;
+volatile uint64_t totalPulseCounter = 0;
 volatile uint32_t calibrationPulseCounter = 0;
 volatile bool calibrationCounting = false;
 FlowCalibration flowCalibration;
@@ -73,12 +80,126 @@ String configTopic;
 String stateTopic;
 String moistureTopic;
 String flowTopic;
+String manualCommandTopic;
+String manualStateTopic;
 
 void IRAM_ATTR countPulse() {
   portENTER_CRITICAL_ISR(&pulseMux);
   pulseCounter++;
+  totalPulseCounter++;
   if (calibrationCounting) calibrationPulseCounter++;
   portEXIT_CRITICAL_ISR(&pulseMux);
+}
+
+uint64_t totalPulses() {
+  portENTER_CRITICAL(&pulseMux);
+  uint64_t result = totalPulseCounter;
+  portEXIT_CRITICAL(&pulseMux);
+  return result;
+}
+
+void updateManualSnapshot(const char* error = "") {
+  ManualSnapshot snapshot = {};
+  snapshot.record = manualRecord;
+  snapshot.interrupted = manualRecord.phase != ManualPhase::Settling &&
+      manualRecord.session != 0 && strcmp(manualRecord.boot, bootId.c_str()) != 0;
+  snapshot.currentPulses = manualRecord.phase == ManualPhase::Paused && !snapshot.interrupted
+      ? totalPulses() : manualRecord.finalPulses;
+  snapshot.paused = manualHold;
+  snapshot.relayOn = relayOn;
+  strlcpy(snapshot.error, error, sizeof(snapshot.error));
+  xQueueOverwrite(manualStateQueue, &snapshot);
+}
+
+bool saveManualRecord(const ManualRecord& record) {
+  if (preferences.putBytes("manual", &record, sizeof(record)) != sizeof(record)) {
+    // Sem confirmacao de gravacao, nao liberar a pausa em RAM.
+    manualHold = true;
+    relayOn = false;
+    digitalWrite(PINO_RELE, RELE_DESLIGADO);
+    Serial.println("Falha ao salvar estado da rega manual; automatico permanece pausado.");
+    return false;
+  }
+  manualRecord = record;
+  return true;
+}
+
+void processManualCommand(const ManualCommand& command) {
+  if (command.sensor != NUMERO_SENSOR_FLUXO || command.version < manualRecord.version) return;
+  if (command.version == manualRecord.version) { updateManualSnapshot(); return; }
+  if (manualHold && manualRecord.phase != ManualPhase::Released && manualRecord.session != 0 && manualRecord.session != command.session) return;
+  ManualRecord next = manualRecord;
+  next.magic = MANUAL_RECORD_MAGIC;
+  next.session = command.session;
+  next.version = command.version;
+  next.sensor = command.sensor;
+  if (command.action == ManualAction::Pause) {
+    if (flowCalibration.cancel()) stopCalibrationPump();
+    manualHold = true;
+    relayOn = false;
+    digitalWrite(PINO_RELE, RELE_DESLIGADO);
+    next.phase = ManualPhase::Settling;
+    next.initialPulses = next.finalPulses = 0;
+    bootId.toCharArray(next.boot, sizeof(next.boot));
+    if (saveManualRecord(next)) {
+      manualPauseAt = millis();
+      Serial.println("Site solicitou rega manual: automatico pausado; aguardando estabilizacao do fluxo.");
+    }
+  } else if (command.action == ManualAction::Finish) {
+    manualHold = true;
+    relayOn = false;
+    digitalWrite(PINO_RELE, RELE_DESLIGADO);
+    if (manualRecord.session != command.session || manualRecord.phase == ManualPhase::Settling || manualRecord.session == 0) {
+      // Cancelamento antes da confirmacao de inicio: nenhum volume manual autorizado.
+      next.initialPulses = totalPulses();
+      bootId.toCharArray(next.boot, sizeof(next.boot));
+    }
+    next.finalPulses = strcmp(next.boot, bootId.c_str()) == 0 ? totalPulses() : next.initialPulses;
+    next.phase = ManualPhase::Measured;
+    if (saveManualRecord(next)) Serial.println("Contagem manual encerrada; aguardando liberacao do site.");
+  } else {
+    next.phase = ManualPhase::Released;
+    if (saveManualRecord(next)) {
+      manualHold = false;
+      Serial.println("Site liberou a pausa manual; controle anterior de umidade restaurado.");
+    }
+  }
+  updateManualSnapshot();
+}
+
+void settleManualPause() {
+  if (manualRecord.phase != ManualPhase::Settling || millis() - manualPauseAt < MANUAL_SETTLE_MS) return;
+  ManualRecord next = manualRecord;
+  next.initialPulses = next.finalPulses = totalPulses();
+  next.phase = ManualPhase::Paused;
+  bootId.toCharArray(next.boot, sizeof(next.boot));
+  if (saveManualRecord(next)) {
+    Serial.println("Pausa confirmada: medicao manual pronta no site.");
+    updateManualSnapshot();
+  }
+}
+
+void receiveManualCommand(int messageSize) {
+  if (messageSize <= 0 || messageSize > 512) { while (mqtt.available()) mqtt.read(); return; }
+  String payload;
+  while (mqtt.available()) payload += static_cast<char>(mqtt.read());
+  JsonDocument doc;
+  if (deserializeJson(doc, payload) || !doc["sessaoId"].is<uint64_t>() ||
+      !doc["versao"].is<uint64_t>() || !doc["sensorNumero"].is<uint32_t>() || !doc["acao"].is<const char*>()) return;
+  ManualCommand command = {};
+  command.session = doc["sessaoId"];
+  command.version = doc["versao"];
+  command.sensor = doc["sensorNumero"];
+  if (command.session == 0 || command.version == 0 || command.version > 9007199254740991ULL) return;
+  String action = doc["acao"].as<String>();
+  if (action == "pausar") command.action = ManualAction::Pause;
+  else if (action == "medir_fim") command.action = ManualAction::Finish;
+  else if (action == "retomar") command.action = ManualAction::Resume;
+  else return;
+  if (command.session > 3002399751580330ULL) return;
+  uint64_t expected = command.session * 3 - (command.action == ManualAction::Pause ? 2 : command.action == ManualAction::Finish ? 1 : 0);
+  if (command.version != expected) return;
+  xQueueOverwrite(manualCommandQueue, &command);
 }
 
 void printCalibrationHelp() {
@@ -116,6 +237,7 @@ void handleSerialCommand(String command) {
   if (command == "AJUDA") {
     printCalibrationHelp();
   } else if (command == "CALIBRAR_FLUXO") {
+    if (manualHold) { Serial.println("Rega manual ativa no site. Finalize a sessao antes de calibrar."); return; }
     if (flowCalibration.active()) {
       Serial.println("Ja existe uma coleta ativa. Finalize ou cancele primeiro.");
       return;
@@ -163,6 +285,7 @@ void handleSerialCommand(String command) {
       Serial.println("Nao ha coleta ativa para cancelar.");
     }
   } else if (command == "RETOMAR_REGA") {
+    if (manualHold) { Serial.println("A pausa da rega manual so pode ser liberada pelo site."); return; }
     if (flowCalibration.active()) {
       Serial.println("Finalize ou cancele a coleta antes de retomar a rega.");
       return;
@@ -209,6 +332,7 @@ bool validConfig(const RemoteConfig& config) {
 
 // Aceita somente snapshots completos. Versoes antigas sao ignoradas no loop.
 void receiveConfig(int messageSize) {
+  if (mqtt.messageTopic() == manualCommandTopic) { receiveManualCommand(messageSize); return; }
   if (mqtt.messageTopic() != configTopic || messageSize <= 0 || messageSize > 512) {
     while (mqtt.available()) mqtt.read();
     return;
@@ -294,6 +418,27 @@ bool sendState(const DeviceState& state) {
   return sendJson(stateTopic, document, true);
 }
 
+bool sendManualState(const ManualSnapshot& state) {
+  if (state.record.session == 0) return true;
+  JsonDocument doc;
+  doc["sessaoId"] = state.record.session;
+  doc["versao"] = state.record.version;
+  doc["sensorNumero"] = state.record.sensor;
+  const char* phase = state.record.phase == ManualPhase::Paused ? "pausada" :
+      state.record.phase == ManualPhase::Measured ? "medida" :
+      state.record.phase == ManualPhase::Settling ? "pausando" : "liberada";
+  doc["fase"] = phase;
+  doc["automaticoPausado"] = state.paused;
+  doc["releLigado"] = state.relayOn;
+  doc["pulsosInicio"] = state.record.initialPulses;
+  doc["pulsosAtuais"] = state.currentPulses;
+  doc["bootId"] = state.record.boot;
+  doc["interrompida"] = state.interrupted;
+  doc["medidoEm"] = isoTime(time(nullptr));
+  if (state.error[0]) doc["erro"] = state.error;
+  return sendJson(manualStateTopic, doc, true);
+}
+
 void networkTask(void*) {
   if (String(WIFI_SSID).startsWith("PREENCHA") || String(MQTT_HOST).startsWith("PREENCHA") ||
       String(MQTT_PASSWORD).startsWith("PREENCHA") || strlen(MQTT_USER) == 0) {
@@ -323,6 +468,9 @@ void networkTask(void*) {
   uint32_t lastMqttAttempt = millis() - 5000;
   uint32_t lastStateSent = 0;
   uint32_t acknowledgedVersion = UINT32_MAX;
+  uint64_t acknowledgedManualVersion = UINT64_MAX;
+  int acknowledgedManualPhase = -1;
+  uint32_t lastManualSent = 0;
   int acknowledgedCalibrationStatus = -1;
   bool acknowledgedPause = false;
 
@@ -348,18 +496,28 @@ void networkTask(void*) {
         continue;
       }
       lastMqttAttempt = now;
-      if (!mqtt.connect(MQTT_HOST, MQTT_PORT) || !mqtt.subscribe(configTopic, 1)) {
+      if (!mqtt.connect(MQTT_HOST, MQTT_PORT) || !mqtt.subscribe(configTopic, 1) || !mqtt.subscribe(manualCommandTopic, 1)) {
         Serial.printf("MQTT indisponivel (codigo %d); nova tentativa em 5 s.\n", mqtt.connectError());
         mqtt.stop();
         continue;
       }
       Serial.println("MQTT conectado; assinatura de configuracao ativa.");
       acknowledgedVersion = UINT32_MAX;
+      acknowledgedManualVersion = UINT64_MAX;
       acknowledgedCalibrationStatus = -1;
       moistureSent = false;  // Reenvio usa o mesmo id, deduplicado pelo servidor.
     }
     mqtt.poll();
     if (!mqtt.connected()) continue;
+
+    ManualSnapshot manual;
+    if (xQueuePeek(manualStateQueue, &manual, 0) == pdTRUE && manual.record.session != 0 &&
+        (acknowledgedManualVersion != manual.record.version || acknowledgedManualPhase != static_cast<int>(manual.record.phase) || now - lastManualSent >= 2000)) {
+      if (!sendManualState(manual)) { mqtt.stop(); continue; }
+      acknowledgedManualVersion = manual.record.version;
+      acknowledgedManualPhase = static_cast<int>(manual.record.phase);
+      lastManualSent = now;
+    }
 
     DeviceState state;
     if (xQueuePeek(stateQueue, &state, 0) == pdTRUE &&
@@ -419,15 +577,29 @@ void setup() {
   bootId = String(MQTT_USER) + ":" + String(static_cast<unsigned long long>(bootNumber)) + ":" + randomId;
   configTopic = String("/regasync/dispositivos/") + MQTT_USER + "/config";
   stateTopic = String("/regasync/dispositivos/") + MQTT_USER + "/estado";
+  manualCommandTopic = String("/regasync/dispositivos/") + MQTT_USER + "/rega-manual/comando";
+  manualStateTopic = String("/regasync/dispositivos/") + MQTT_USER + "/rega-manual/estado";
   moistureTopic = String("/umidade/") + NUMERO_SENSOR_UMIDADE;
   flowTopic = String("/fluxo/") + NUMERO_SENSOR_FLUXO;
   telemetryQueue = xQueueCreate(30, sizeof(Telemetry));
   configQueue = xQueueCreate(1, sizeof(RemoteConfig));
   stateQueue = xQueueCreate(1, sizeof(DeviceState));
-  if (!telemetryQueue || !configQueue || !stateQueue) {
+  manualCommandQueue = xQueueCreate(1, sizeof(ManualCommand));
+  manualStateQueue = xQueueCreate(1, sizeof(ManualSnapshot));
+  if (!telemetryQueue || !configQueue || !stateQueue || !manualCommandQueue || !manualStateQueue) {
     Serial.println("Memoria insuficiente; rele permanece desligado.");
     for (;;) delay(1000);
   }
+  if (preferences.getBytesLength("manual") == sizeof(manualRecord)) {
+    ManualRecord stored;
+    preferences.getBytes("manual", &stored, sizeof(stored));
+    if (stored.magic == MANUAL_RECORD_MAGIC && static_cast<uint8_t>(stored.phase) <= 3 && stored.boot[127] == '\0') {
+      manualRecord = stored;
+      manualHold = stored.session != 0 && stored.phase != ManualPhase::Released;
+      manualPauseAt = millis();
+    }
+  }
+  updateManualSnapshot();
   if (xTaskCreate(networkTask, "mqtt-network", 12288, nullptr, 1, nullptr) != pdPASS) {
     Serial.println("Falha ao iniciar tarefa MQTT. Controle local permanece ativo.");
   }
@@ -439,6 +611,9 @@ void setup() {
 }
 
 void loop() {
+  ManualCommand command;
+  if (xQueueReceive(manualCommandQueue, &command, 0) == pdTRUE) processManualCommand(command);
+  settleManualPause();
   pollSerialCommands();
   if (flowCalibration.expire(millis())) {
     stopCalibrationPump();
@@ -458,7 +633,7 @@ void loop() {
       Serial.println("Configuracao rejeitada: falha ao persistir na NVS.");
     }
   }
-  if (!flowCalibration.active() && (irrigationPaused || !settings.automaticWatering) && relayOn) {
+  if (manualHold || (!flowCalibration.active() && (irrigationPaused || !settings.automaticWatering) && relayOn)) {
     relayOn = false;
     digitalWrite(PINO_RELE, RELE_DESLIGADO);
   }
@@ -487,12 +662,13 @@ void loop() {
   int adc = sum / NUM_LEITURAS;
   int humidity = constrain(static_cast<int>(100.0 * (ADC_SECO - adc) / (ADC_SECO - ADC_MOLHADO)), 0, 100);
   if (!flowCalibration.active()) {
-    relayOn = !irrigationPaused && settings.automaticWatering && humidity < (relayOn ? settings.humidityOff : settings.humidityOn);
+    relayOn = !manualHold && !irrigationPaused && settings.automaticWatering && humidity < (relayOn ? settings.humidityOff : settings.humidityOn);
   }
   digitalWrite(PINO_RELE, relayOn ? RELE_LIGADO : RELE_DESLIGADO);
   DeviceState state = {settings, humidity, adc, relayOn, flow, totalVolume,
                        pulsesPerLiter, flowCalibration.status(), calibrationPulses(), irrigationPaused};
   xQueueOverwrite(stateQueue, &state);
+  updateManualSnapshot();
 
   uint32_t publicationInterval = measuredAtMs - previousPublication;
   if (publicationInterval >= settings.publishIntervalMs) {

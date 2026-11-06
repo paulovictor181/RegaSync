@@ -13,6 +13,8 @@ O sketch em `sketch_sep27a/` adapta o circuito original: GPIO 32 (umidade), GPIO
 
 ## Leituras
 
+O site tambem oferece [sessoes de rega manual com pausa confirmada do automatico](../docs/manual-irrigation.md), no card do sensor de fluxo. Essa funcao exige o sketch atualizado com `manual_irrigation.h` e as novas ACLs do broker.
+
 O envio ocorre a cada 5 segundos inicialmente, com MQTT 3.1.1, QoS 1 e retain=false. O controle local continua a cada segundo, mesmo sem rede. A tarefa de rede usa filas e nao bloqueia a leitura nem o rele.
 
 | Topico | Conteudo |

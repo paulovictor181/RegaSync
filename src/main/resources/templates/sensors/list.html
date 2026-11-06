@@ -109,6 +109,13 @@
 
           <footer class="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
             <a
+              th:if="${s.type == T(br.com.ufersa.regasync.sensor.model.SensorType).FLUXO}"
+              th:href="@{/sensores/{id}/rega-manual(id=${s.id})}"
+              class="button-primary w-full"
+            >
+              Rega manual
+            </a>
+            <a
               th:href="@{/sensores/{id}(id=${s.id})}"
               class="text-sm font-semibold text-brand-700 hover:underline"
             >

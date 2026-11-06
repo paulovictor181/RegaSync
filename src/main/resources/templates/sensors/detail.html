@@ -35,6 +35,13 @@
         ></time>
       </section>
       <h2 class="mt-10 text-xl font-semibold">Histórico · 30 dias</h2>
+      <a
+        th:if="${sensor.type == T(br.com.ufersa.regasync.sensor.model.SensorType).FLUXO}"
+        th:href="@{/sensores/{id}/rega-manual(id=${sensor.id})}"
+        class="button-primary mt-4"
+      >
+        Rega manual
+      </a>
       <div class="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
         <table class="w-full text-left text-sm">
           <thead class="bg-brand-50">

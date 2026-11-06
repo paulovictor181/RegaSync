@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:replace="~{fragments/layout :: head('Rega manual')}"></head>
+  <body class="flex min-h-dvh flex-col">
+    <header th:replace="~{fragments/layout :: header}"></header>
+    <main id="conteudo" class="mx-auto w-full max-w-3xl flex-1 px-5 py-8 sm:px-8">
+      <a th:href="@{/sensores}" class="text-sm font-semibold text-brand-700">← Dashboard</a>
+      <p class="mt-6 text-xs font-semibold tracking-widest text-brand-600 uppercase">
+        Medição de água
+      </p>
+      <h1 class="mt-2 text-3xl font-semibold text-slate-900">Rega manual</h1>
+      <p class="mt-2 text-slate-500" th:text="${sensor.name}"></p>
+      <div th:if="${successMessage}" class="notice-success mt-5" th:text="${successMessage}"></div>
+      <div th:if="${errorMessage}" class="notice-error mt-5" th:text="${errorMessage}"></div>
+
+      <section class="mt-6 rounded-2xl border border-brand-200 bg-white p-6 sm:p-8">
+        <p
+          id="manual-status"
+          class="text-sm font-semibold text-brand-700"
+          th:text="${manual.label}"
+        ></p>
+        <p class="mt-4 text-5xl font-semibold tracking-tight text-brand-900">
+          <span id="manual-liters" th:text="${#numbers.formatDecimal(manual.liters,1,3)}">
+            0,000
+          </span>
+          <span class="text-xl">L</span>
+        </p>
+        <p class="mt-2 text-sm text-slate-500">
+          Duração:
+          <span id="manual-duration" th:text="${manual.seconds}">0</span>
+          s
+        </p>
+        <p
+          id="manual-message"
+          class="mt-5 text-sm leading-6 text-slate-700"
+          role="status"
+          th:text="${manual.message}"
+        ></p>
+        <p id="manual-connection" class="mt-2 text-xs text-slate-500"></p>
+
+        <form
+          id="manual-start"
+          th:action="@{/sensores/{id}/rega-manual/iniciar(id=${sensor.id})}"
+          method="post"
+          class="mt-6"
+          th:hidden="${!manual.canStart}"
+        >
+          <button class="button-primary w-full" type="submit">
+            Iniciar rega manual e pausar automático
+          </button>
+        </form>
+        <form
+          id="manual-finish"
+          th:action="@{/sensores/{id}/rega-manual/{session}/finalizar(id=${sensor.id},session=${manual.id == null ? 0 : manual.id})}"
+          method="post"
+          class="mt-6"
+          th:hidden="${!manual.canFinish}"
+        >
+          <p class="mb-3 text-sm font-semibold text-slate-700">
+            Feche a válvula do ramal manual antes de finalizar.
+          </p>
+          <button class="button-secondary w-full" type="submit">
+            Válvula fechada: finalizar e restaurar automático
+          </button>
+        </form>
+      </section>
+
+      <section class="mt-5 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 class="font-semibold text-slate-900">Como usar</h2>
+        <ol class="mt-3 list-inside list-decimal space-y-2 text-sm leading-6 text-slate-600">
+          <li>Inicie a sessão e aguarde o ESP32 confirmar a pausa.</li>
+          <li>Quando aparecer “Rega manual em andamento”, abra o ramal manual.</li>
+          <li>Feche a válvula e clique em finalizar. Aguarde a confirmação da retomada.</li>
+        </ol>
+        <p class="mt-3 text-xs leading-5 text-slate-500">
+          O sensor está antes da bifurcação. A pausa impede que o ramal automático se misture à
+          medição manual. Um ESP32 desconectado mantém a pausa até receber a finalização; a
+          configuração de umidade é preservada.
+        </p>
+      </section>
+
+      <h2 class="mt-8 text-xl font-semibold text-slate-900">Histórico de regas manuais</h2>
+      <section class="mt-4 grid gap-4 sm:grid-cols-2" aria-label="Histórico de regas manuais">
+        <article
+          th:each="session:${history.content}"
+          class="rounded-2xl border border-slate-200 bg-white p-5"
+        >
+          <p class="text-sm font-semibold text-brand-700" th:text="${session.label}"></p>
+          <p
+            class="mt-2 text-2xl font-semibold"
+            th:text="${#numbers.formatDecimal(session.liters,1,3)+' L'}"
+          ></p>
+          <p class="mt-2 text-xs text-slate-500" th:text="${'Duração: '+session.seconds+' s'}"></p>
+          <p
+            th:if="${session.startedAt != null}"
+            class="mt-1 text-xs text-slate-500"
+            th:text="${#temporals.format(session.startedAt,'dd/MM/yyyy HH:mm:ss')+' UTC'}"
+          ></p>
+          <p th:if="${session.interrupted}" class="mt-2 text-xs text-red-700">
+            Volume parcial: o ESP32 reiniciou durante a medição.
+          </p>
+        </article>
+        <p th:if="${history.empty}" class="text-sm text-slate-500">Nenhuma sessão registrada.</p>
+      </section>
+      <nav
+        th:if="${history.totalPages > 1}"
+        class="mt-5 flex items-center justify-between"
+        aria-label="Paginação de regas manuais"
+      >
+        <a
+          th:if="${history.hasPrevious()}"
+          th:href="@{/sensores/{id}/rega-manual(id=${sensor.id},page=${history.number-1})}"
+          class="button-secondary"
+        >
+          Anterior
+        </a>
+        <span
+          class="text-sm text-slate-500"
+          th:text="${'Página '+(history.number+1)+' de '+history.totalPages}"
+        ></span>
+        <a
+          th:if="${history.hasNext()}"
+          th:href="@{/sensores/{id}/rega-manual(id=${sensor.id},page=${history.number+1})}"
+          class="button-secondary"
+        >
+          Próxima
+        </a>
+      </nav>
+    </main>
+    <footer th:replace="~{fragments/layout :: footer}"></footer>
+    <script th:inline="javascript">
+      const sensorId = [[${sensor.id}]];
+      let previousStatus = [[${manual.status}]];
+      async function refreshManual() {
+        try {
+          const response = await fetch('/api/regas-manuais/' + sensorId);
+          if (response.redirected || response.status === 401) { location.href = '/login'; return; }
+          if (!response.ok) return;
+          const state = await response.json();
+          document.getElementById('manual-status').textContent = state.label;
+          document.getElementById('manual-liters').textContent = Number(state.liters).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+          document.getElementById('manual-duration').textContent = state.seconds;
+          document.getElementById('manual-message').textContent = state.message;
+          document.getElementById('manual-start').hidden = !state.canStart;
+          const finish = document.getElementById('manual-finish');
+          finish.hidden = !state.canFinish;
+          if (state.id) finish.action = '/sensores/' + sensorId + '/rega-manual/' + state.id + '/finalizar';
+          const active = !['NONE','BUSY','COMPLETED'].includes(state.status);
+          const stale = !state.feedbackAt || Date.now() - new Date(state.feedbackAt).getTime() > 30000;
+          document.getElementById('manual-connection').textContent = active && stale ? 'Sem confirmação recente do ESP32. Mantenha a válvula manual fechada até a conexão ser confirmada.' : '';
+          if (state.status === 'COMPLETED' && previousStatus !== 'COMPLETED') { location.reload(); return; }
+          previousStatus = state.status;
+        } catch (error) { document.getElementById('manual-connection').textContent = 'Conexão com o site interrompida. Feche o ramal manual e tente novamente.'; }
+      }
+      refreshManual();
+      setInterval(refreshManual, 2000);
+    </script>
+  </body>
+</html>

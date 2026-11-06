@@ -65,6 +65,8 @@ Todos os formulários usam CSRF, senhas são armazenadas com BCrypt e autorizaç
 
 ## Sensores e MQTT
 
+Para medir a agua do ramal manual com pausa do automatico, use **Rega manual** no card de fluxo. O fluxo completo e os passos de atualizacao estao em [docs/manual-irrigation.md](docs/manual-irrigation.md).
+
 O firmware integrado ao contrato do sistema e os comandos para configurar o ESP32 via MQTT estao em [firmware/README.md](firmware/README.md).
 
 Cadastre sensores pela tela **Sensores**. A criação e alteração da configuração exigem perfil administrador; usuários autenticados podem consultar sensores e leituras. O tópico é gerado do tipo e número: `/umidade/1` ou `/fluxo/1`. Tipo e número ficam fixos depois da criação. A desativação preserva o histórico.
