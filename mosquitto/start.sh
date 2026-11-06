@@ -9,10 +9,14 @@ cat > /mosquitto/config/acl <<EOF
 user $MQTT_SERVER_USERNAME
 topic read /umidade/+
 topic read /fluxo/+
+topic write /regasync/dispositivos/+/config
+topic read /regasync/dispositivos/+/estado
 topic read \$SYS/broker/version
 user $MQTT_ESP_USERNAME
 topic write /umidade/+
 topic write /fluxo/+
+topic read /regasync/dispositivos/$MQTT_ESP_USERNAME/config
+topic write /regasync/dispositivos/$MQTT_ESP_USERNAME/estado
 EOF
 chown 1883:1883 /mosquitto/config/passwd /mosquitto/config/acl
 chmod 640 /mosquitto/config/passwd /mosquitto/config/acl

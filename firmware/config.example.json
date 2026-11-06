@@ -1,0 +1,7 @@
+{
+  "versao": 1,
+  "umidadeLigar": 38,
+  "umidadeDesligar": 45,
+  "regaAutomatica": true,
+  "intervaloPublicacaoMs": 5000
+}

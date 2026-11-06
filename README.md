@@ -65,6 +65,8 @@ Todos os formulários usam CSRF, senhas são armazenadas com BCrypt e autorizaç
 
 ## Sensores e MQTT
 
+O firmware integrado ao contrato do sistema e os comandos para configurar o ESP32 via MQTT estao em [firmware/README.md](firmware/README.md).
+
 Cadastre sensores pela tela **Sensores**. A criação e alteração da configuração exigem perfil administrador; usuários autenticados podem consultar sensores e leituras. O tópico é gerado do tipo e número: `/umidade/1` ou `/fluxo/1`. Tipo e número ficam fixos depois da criação. A desativação preserva o histórico.
 
 Umidade exige leituras ADC seco e molhado distintas. O servidor calcula `100 × (seco − ADC) / (seco − molhado)` e limita a apresentação entre 0 e 100%. Fluxo exige pulsos por litro; publique o número de pulsos contados num intervalo em milissegundos e o servidor calcula `pulsos × 60000 / (intervaloMs × pulsosPorLitro)`. Leituras guardam valor bruto, valor convertido, instante UTC e versão da calibração.
@@ -77,7 +79,7 @@ Mensagens MQTT 3.1.1 usam JSON, QoS 1 e `retain=false`:
 
 Publique no tópico de umidade cadastrado. Para vazão use `{"id":"boot-a1:43","medidoEm":"2026-11-05T12:00:01Z","pulsos":45,"intervaloMs":1000}` no tópico cadastrado de fluxo. `id` precisa ser único por sensor, inclusive após reinicializar o ESP. `medidoEm` é UTC. O ESP deve sincronizar o relógio e autenticar com `MQTT_ESP_USERNAME` e `MQTT_ESP_PASSWORD`.
 
-Para usar a aplicação pelo IntelliJ com o broker do Compose, mantenha `MQTT_ENABLED=true` na configuração de execução e informe `MQTT_URL=tcp://localhost:1883`, `MQTT_USERNAME` e `MQTT_PASSWORD` com as credenciais de servidor presentes no `.env`. No Compose essas variáveis já apontam à rede interna. O Mosquitto separa as credenciais do ESP (publicação nos tópicos dos sensores) das credenciais de leitura do servidor. O histórico é consultado por até 30 dias nesta tela; alterar calibração preserva os valores históricos.
+Para usar a aplicação pelo IntelliJ com o broker do Compose, mantenha `MQTT_ENABLED=true` na configuração de execução e informe `MQTT_URL=tcp://localhost:1883`, `MQTT_USERNAME` e `MQTT_PASSWORD` com as credenciais de servidor presentes no `.env`. No Compose essas variáveis já apontam à rede interna. O Mosquitto separa as credenciais do ESP (publicação nos tópicos dos sensores) das credenciais do servidor, que lê os sensores e pode publicar configurações de dispositivos. O histórico é consultado por até 30 dias nesta tela; alterar calibração preserva os valores históricos.
 
 A API autenticada `GET /api/sensores/atuais?ids=1,2` recebe até 50 IDs e devolve um objeto indexado pelo ID do sensor. Cada item tem `valor`, `unidade`, `medidoEm` e `recebidoEm`; sensores sem leitura recente são omitidos. A página de monitoramento usa esse contrato para atualizar os valores a cada cinco segundos.
 

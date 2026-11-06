@@ -25,6 +25,7 @@ else
 fi
 
 compose up -d db mosquitto nginx
+compose exec -T nginx nginx -t
 
 if [ "$certificate_exists" = false ]; then
   compose --profile certificates run --rm certbot
