@@ -85,7 +85,7 @@ Publique no tópico de umidade cadastrado. Para vazão use `{"id":"boot-a1:43","
 
 Para usar a aplicação pelo IntelliJ com o broker do Compose, mantenha `MQTT_ENABLED=true` na configuração de execução e informe `MQTT_URL=tcp://localhost:1883`, `MQTT_USERNAME` e `MQTT_PASSWORD` com as credenciais de servidor presentes no `.env`. No Compose essas variáveis já apontam à rede interna. O Mosquitto separa as credenciais do ESP (publicação nos tópicos dos sensores) das credenciais do servidor, que lê os sensores e pode publicar configurações de dispositivos. O histórico abre nos últimos 30 dias e permite selecionar outro período, ordenar os valores e paginar no banco; alterar calibração preserva os valores históricos.
 
-A API autenticada `GET /api/sensores/atuais?ids=1,2` recebe até 50 IDs e devolve um objeto indexado pelo ID do sensor. Cada item tem `valor`, `unidade`, `medidoEm` e `recebidoEm`; sensores sem leitura recente são omitidos. A página de monitoramento usa esse contrato para atualizar os valores a cada cinco segundos. Os gráficos mostram médias por hora das últimas 24 horas, calculadas no banco e atualizadas ao abrir a página, com lacunas nos intervalos sem leituras. O cadastro de cada sensor aparece no painel e no detalhe. As datas na interface seguem `dd/MM/aaaa HH:mm:ss` no fuso `America/Sao_Paulo` (horário de Brasília); os instantes no banco e na API continuam em UTC.
+A API autenticada `GET /api/sensores/atuais?ids=1,2` recebe até 50 IDs e devolve um objeto indexado pelo ID do sensor. Cada item tem `valor`, `unidade`, `medidoEm` e `recebidoEm`; sensores sem leitura recente são omitidos. A página de monitoramento usa esse contrato para atualizar os valores a cada cinco segundos. Os gráficos seguem o período selecionado, com médias por hora até sete dias e por dia em períodos maiores, calculadas no banco e atualizadas ao aplicar o filtro. Intervalos sem leituras aparecem como lacunas. A data de cadastro aparece na listagem de sensores e no detalhe. As datas na interface seguem `dd/MM/aaaa HH:mm:ss` no fuso `America/Sao_Paulo` (horário de Brasília); os instantes no banco e na API continuam em UTC.
 
 ## Compose e acesso pela internet
 
@@ -153,3 +153,17 @@ O firmware passa a publicar o estado também ao detectar mudança do relé. Atua
 ### Dashboard e cadastro de sensores
 
 O menu **Dashboard** (`/dashboard`) abre a visão geral da irrigação, com totais de sensores, último evento da bomba, últimas leituras e gráficos dos sensores ativos. O monitoramento mostra seis sensores por página. O menu **Sensores** (`/sensores`) abre a tabela de cadastros, com busca, filtros, ordenação, paginação e acesso a detalhes, configuração e rega manual. Os gráficos individuais continuam disponíveis no detalhe do sensor.
+
+### Consumo por modo no dashboard
+
+O filtro de datas em `/dashboard` seleciona o período dos potes e dos gráficos, usando dias completos no horário de Brasília. O detalhe do sensor usa as mesmas datas para o gráfico e a tabela, independentemente da ordenação e da página do histórico. Os links de paginação preservam o período.
+
+Os dois potes exibem os volumes absolutos em litros. O preenchimento representa `volume do modo / (automático + manual) × 100`; os dois ficam vazios quando o total é zero. O total de fluxo vem dos pulsos de cada amostra e da calibração vigente na medição, preservada em `volume_liters`. Dados antigos são migrados pela vazão histórica × duração da amostra. O manual vem dos volumes confirmados pelo ESP32 nas sessões do dispositivo configurado, incluindo volumes parciais já recebidos. Estes indicadores são agregados do sistema e não exibem proprietário ou detalhes privados das sessões.
+
+Como o sensor de fluxo está antes da bifurcação, o automático é o fluxo total menos o volume manual, limitado a zero. Se o manual exceder as amostras de fluxo recebidas, o dashboard informa a inconsistência, pois falta telemetria para calcular o automático. Medições e sessões que atravessam o limite do período são rateadas proporcionalmente ao tempo, supondo vazão uniforme dentro do intervalo. A calibração atual não recalcula volumes de amostras antigas. A finalização manual congela o volume antes da retomada automática.
+
+### Demonstração local sem seed
+
+Defina `DEMO_ENABLED=true` no `.env` e reinicie a aplicação. No dashboard, clique em **Testar com dados fictícios** ou acesse `/dashboard/demo`. O ambiente de produção força a opção como desabilitada.
+
+A demonstração só fica disponível quando não existem leituras, sessões manuais, estados ou eventos da bomba. Usuários e cadastros de sensores podem existir, pois o modo não os altera. São gerados em memória dois sensores, gráficos para o período selecionado e consumo de 100 L por dia (75 L automático e 25 L manual). A tela informa explicitamente que os dados são fictícios, desabilita ações sobre dispositivos e não consulta a API de leituras em tempo real. `/dashboard` continua mostrando exclusivamente os dados reais. Não existe seed, inserção automática ou necessidade de apagar registros.

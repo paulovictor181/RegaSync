@@ -38,17 +38,17 @@ public class SensorController {
             @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate to, Model model){
         var sensor=service.get(id);
-        LocalDate today=LocalDate.now(BrazilianDates.ZONE);
-        if(from==null) from=today.minusDays(30);
-        if(to==null) to=today;
-        if(from.isAfter(to)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"A data inicial deve ser anterior à final.");
+        var period=br.com.ufersa.regasync.shared.model.ReportPeriod.resolve(from,to,30);
+        from=period.from();to=period.to();
+        model.addAttribute("periodLabel",period.label());
+        model.addAttribute("dailyChart",java.time.Duration.between(period.start(),period.end()).compareTo(java.time.Duration.ofDays(7))>0);
         String field=List.of("measuredAt","rawValue","convertedValue").contains(sort)?sort:"measuredAt";
         var order=Sort.by("asc".equalsIgnoreCase(direction)?Sort.Direction.ASC:Sort.Direction.DESC,field).and(Sort.by("id").descending());
         var history=service.history(id,from.atStartOfDay(BrazilianDates.ZONE).toInstant(),
                 to.plusDays(1).atStartOfDay(BrazilianDates.ZONE).toInstant(),
                 PageRequest.of(Math.max(0,page),Math.min(50,Math.max(1,size)),order));
         model.addAttribute("sensor",sensor);
-        model.addAttribute("chart",charts.charts(List.of(id)).get(id));
+        model.addAttribute("chart",charts.charts(List.of(id),period.start(),period.end()).get(id));
         model.addAttribute("latest",service.latest(id).orElse(null));
         model.addAttribute("readings",history);
         model.addAttribute("from",from);model.addAttribute("to",to);

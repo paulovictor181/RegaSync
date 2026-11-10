@@ -44,7 +44,7 @@ class SensorDashboardTests extends IntegrationTestSupport {
         assertThat(result.get(moisture.getId()).samples()).isEqualTo(2);
         assertThat(result.get(moisture.getId()).points()).singleElement().satisfies(p -> assertThat(p.label()).contains("30,00"));
         assertThat(result.get(flow.getId()).points()).singleElement().satisfies(p -> assertThat(p.label()).contains("5,00"));
-        String html=mvc.perform(get("/dashboard")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String html=mvc.perform(get("/dashboard").param("from",hour.atZone(BrazilianDates.ZONE).toLocalDate().toString()).param("to",Instant.now().atZone(BrazilianDates.ZONE).toLocalDate().toString())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(html).contains("Acionamentos da bomba", "Evolução", "<svg", "30,00", "L/min");
         assertThat(html).doesNotContain("name=\"q\"", "name=\"sort\"", "Cadastrar sensor", "Configurar");
         String inventory=mvc.perform(get("/sensores")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
@@ -103,6 +103,13 @@ class SensorDashboardTests extends IntegrationTestSupport {
         assertThat(page.getContent()).hasSize(2);
         assertThat(response.getResponse().getContentAsString()).contains("/dashboard?page=0", "Umidade 7", "Umidade 8")
                 .doesNotContain("Inativo");
+    }
+
+    @Test @WithMockUser(roles="USER")
+    void demoIsDisabledByDefault() throws Exception {
+        mvc.perform(get("/dashboard/demo")).andExpect(status().isNotFound());
+        String html=mvc.perform(get("/dashboard")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(html).doesNotContain("Testar com dados fictícios", "Modo demonstração");
     }
 
     @Test void brazilianDatesConvertUtcAndHandleDayRollover() {

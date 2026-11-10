@@ -16,12 +16,18 @@ public class SensorChartService {
 
     @Transactional(readOnly=true)
     public Map<Long, Chart> charts(List<Long> ids) {
+        Instant end=Instant.now();
+        return charts(ids,end.minus(Duration.ofHours(24)),end);
+    }
+    @Transactional(readOnly=true)
+    public Map<Long, Chart> charts(List<Long> ids,Instant start,Instant end) {
         if (ids.isEmpty()) return Map.of();
         if (ids.size() > 50) throw new IllegalArgumentException("Até 50 sensores por consulta.");
-        Instant end = Instant.now();
-        Instant start = end.minus(Duration.ofHours(24));
+        if(!start.isBefore(end)) throw new IllegalArgumentException("Período inválido.");
+        long duration=Duration.between(start,end).toMillis();
+        boolean daily=duration>Duration.ofDays(7).toMillis();
         Map<Long, List<SensorReadingRepository.HourlyAverage>> groups = new HashMap<>();
-        readings.hourlyAverages(ids, start, end).forEach(row ->
+        readings.hourlyAverages(ids, start, end, daily?"day":"hour").forEach(row ->
                 groups.computeIfAbsent(row.getSensorId(), key -> new ArrayList<>()).add(row));
         Map<Long, Chart> result = new HashMap<>();
         var dates = new BrazilianDates();
@@ -32,9 +38,9 @@ public class SensorChartService {
             Instant previous = null;
             long samples = 0;
             for (var row : rows) {
-                double x = 40 + Math.max(0, Duration.between(start, row.getMeasuredAt()).toMillis()) / 86400000d * 540;
+                double x = 40 + Math.max(0, Duration.between(start, row.getMeasuredAt()).toMillis()) / (double)duration * 540;
                 double y = 160 - row.getValue().doubleValue() / maximum * 130;
-                boolean gap = previous == null || Duration.between(previous, row.getMeasuredAt()).toMinutes() > 60;
+                boolean gap = previous == null || Duration.between(previous, row.getMeasuredAt()).toMinutes() > (daily?1500:60);
                 path.append(String.format(Locale.ROOT, "%s %.2f %.2f ", gap ? "M" : "L", x, y));
                 String value = String.format(Locale.forLanguageTag("pt-BR"), "%.2f", row.getValue());
                 points.add(new Point(x, y, dates.format(row.getMeasuredAt()) + " · Média: " + value + " · " + row.getSamples() + " leituras"));

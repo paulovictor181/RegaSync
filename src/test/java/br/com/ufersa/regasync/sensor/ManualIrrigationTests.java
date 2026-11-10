@@ -64,8 +64,9 @@ class ManualIrrigationTests extends IntegrationTestSupport {
         service.acknowledge(ACK, ack(id, id*3-1, "medida", 100, 775, true, false, false));
         assertThat(service.view(flow.getId()).status()).isEqualTo("RESUMING");
         assertThat(service.view(flow.getId()).liters()).isEqualByComparingTo("1.5");
-        service.acknowledge(ACK, ack(id, id*3, "liberada", 100, 775, false, true, false));
+        service.acknowledge(ACK, ack(id, id*3, "liberada", 100, 900, false, true, false));
         assertThat(service.view(flow.getId()).status()).isEqualTo("COMPLETED");
+        assertThat(service.view(flow.getId()).liters()).isEqualByComparingTo("1.5");
         assertThat(service.view(flow.getId()).canStart()).isTrue();
         assertThat(service.pendingCommands()).isEmpty();
     }

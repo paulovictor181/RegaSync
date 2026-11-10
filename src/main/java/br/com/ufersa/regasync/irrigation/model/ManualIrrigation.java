@@ -53,7 +53,7 @@ public class ManualIrrigation {
         if (lost || (bootId != null && !bootId.equals(boot))) {
             interrupted = true;
             error = "ESP32 reiniciado: volume parcial preservado. Feche o ramal manual e finalize.";
-        } else if (!interrupted) {
+        } else if (!interrupted && measuredEndAt == null) {
             if (startPulses == null) { startPulses = initial; bootId = boot; startedAt = measuredAt; }
             if (initial != startPulses || current < startPulses) return;
             if (lastPulses != null && current < lastPulses) return;

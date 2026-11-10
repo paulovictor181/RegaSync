@@ -17,12 +17,14 @@ public class SensorReading {
     @Column(name="raw_value",nullable=false) private long rawValue;
     @Column(name="interval_ms") private Long intervalMs;
     @Column(name="converted_value",nullable=false,precision=16,scale=4) private BigDecimal convertedValue;
+    @Column(name="volume_liters", precision=24, scale=8) private BigDecimal volumeLiters;
     @Column(nullable=false,length=12) private String unit;
     @Column(name="calibration_version",nullable=false) private int calibrationVersion;
     protected SensorReading() { }
     public SensorReading(Sensor sensor,String messageId,Instant measuredAt,long rawValue,Long intervalMs,BigDecimal convertedValue) {
         this.sensor=sensor; this.messageId=messageId; this.measuredAt=measuredAt; this.receivedAt=Instant.now();
         this.rawValue=rawValue; this.intervalMs=intervalMs; this.convertedValue=convertedValue;
+        if(sensor.getType()==SensorType.FLUXO) this.volumeLiters=BigDecimal.valueOf(rawValue).divide(sensor.getPulsesPerLiter(),8,java.math.RoundingMode.HALF_UP);
         this.unit=sensor.getType().unit(); this.calibrationVersion=sensor.getCalibrationVersion();
     }
 }
