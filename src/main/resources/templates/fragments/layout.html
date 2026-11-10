@@ -52,6 +52,13 @@
           >
             Criar usuário
           </a>
+          <a
+            th:if="${isAdmin}"
+            th:href="@{/admin/configuracoes/fluxo}"
+            class="rounded-lg px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+          >
+            Limites de vazão
+          </a>
           <form th:action="@{/logout}" method="post">
             <button class="button-secondary" type="submit">
               Sair da conta

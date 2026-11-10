@@ -61,6 +61,14 @@ class DemoDashboardTests extends IntegrationTestSupport {
         jdbc.update("insert into pump_states(device,running) values ('esp32',false)");
         blocked();
     }
+    @Test void expandedMockGraphUsesFiltersWithoutReadingOrWritingRealSensors() throws Exception {
+        var before=counts();
+        String html=mvc.perform(get("/dashboard/demo/grafico/1").param("from","2026-11-05").param("to","2026-11-05").param("interval","minute"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(html).contains("Modo demonstração", "Médias por minuto", "Voltar à demonstração").doesNotContain("/sensores/1");
+        assertThat(counts()).isEqualTo(before);
+    }
+
     @Test void anonymousUsersCannotAccessMockData() throws Exception {
         mvc.perform(get("/dashboard/demo").with(anonymous())).andExpect(status().is3xxRedirection());
     }

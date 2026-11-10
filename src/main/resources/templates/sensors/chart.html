@@ -12,7 +12,7 @@
       ></h3>
       <p
         class="mt-1 text-xs text-slate-500"
-        th:text="${dailyChart ? 'Médias por dia · horário de Brasília' : 'Médias por hora · horário de Brasília'}"
+        th:text="${chartIntervalLabel != null ? chartIntervalLabel+' · horário de Brasília' : (dailyChart ? 'Médias por dia · horário de Brasília' : 'Médias por hora · horário de Brasília')}"
       ></p>
       <svg
         th:if="${chart != null}"
@@ -34,12 +34,18 @@
           th:cx="${point.x}"
           th:cy="${point.y}"
           r="4"
-          fill="#296548"
+          th:fill="${point.interference ? '#d97706' : '#296548'}"
+          th:aria-label="${point.label}"
           tabindex="0"
         >
           <title th:text="${point.label+' (unidade: '+unit+')'}"></title>
         </circle>
       </svg>
+      <p
+        th:if="${chart != null and chart.interferenceSamples > 0}"
+        class="mt-3 text-sm font-semibold text-amber-700"
+        th:text="${'● Possível interferência: '+chart.interferenceSamples+' leituras. Marcadas em laranja e excluídas do consumo.'}"
+      ></p>
       <p th:if="${chart == null}" class="py-8 text-center text-sm text-slate-500">
         Sem leituras no período selecionado.
       </p>

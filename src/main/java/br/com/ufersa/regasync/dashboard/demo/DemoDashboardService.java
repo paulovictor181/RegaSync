@@ -39,16 +39,21 @@ public class DemoDashboardService {
         return enabled && readings.count()==0 && manual.count()==0 && events.count()==0 && states.count()==0;
     }
     @Transactional(readOnly=true)
-    public Demo preview(ReportPeriod period) {
+    public Demo preview(ReportPeriod period) { return preview(period,"auto"); }
+    @Transactional(readOnly=true)
+    public Demo preview(ReportPeriod period,String interval) {
         if(!enabled) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         if(!available()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Demonstração disponível apenas sem medições, sessões manuais ou eventos da bomba.");
         var sensors=List.of(new DemoSensor(1,"Umidade · demonstração",SensorType.UMIDADE,true),
                 new DemoSensor(2,"Fluxo · demonstração",SensorType.FLUXO,true));
         Map<Long,Chart> charts=new HashMap<>();
         Map<Long,DemoReading> latest=new HashMap<>();
-        boolean daily=Duration.between(period.start(),period.end()).compareTo(Duration.ofDays(7))>0;
+        if(!List.of("auto","minute","hour","day").contains(interval)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Intervalo inválido.");
+        boolean daily=interval.equals("day") || (interval.equals("auto") && Duration.between(period.start(),period.end()).compareTo(Duration.ofDays(7))>0);
+        if(interval.equals("minute") && Duration.between(period.start(),period.end()).toMinutes()>4096)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Selecione um período menor para visualizar por minuto.");
         long days=java.time.temporal.ChronoUnit.DAYS.between(period.from(),period.to())+1;
-        int buckets=(int)Math.min(96,daily?days:days*24);
+        int buckets=(int)Math.min(4096,interval.equals("minute")?days*1440:daily?days:days*24);
         var dates=new BrazilianDates();
         for(var sensor:sensors) {
             List<Point> points=new ArrayList<>();
@@ -58,7 +63,7 @@ public class DemoDashboardService {
                 double fraction=buckets==1?0.5:i/(double)(buckets-1);
                 Instant at=period.start().plusMillis((long)(Duration.between(period.start(),period.end()).toMillis()*fraction));
                 if(!at.isBefore(period.end())) at=period.end().minusSeconds(1);
-                double value=sensor.type()==SensorType.UMIDADE?52+14*Math.sin(i*Math.PI/6):100d/1440+0.05*Math.sin(i*Math.PI/6);
+                double value=sensor.type()==SensorType.UMIDADE?52+14*Math.sin(i*Math.PI/6):(i%24>=8 && i%24<14?100d/360:0);
                 if(daily) value=sensor.type()==SensorType.UMIDADE?52+6*Math.sin(i):100d/1440;
                 double x=40+fraction*540,y=160-value/maximum*130;
                 path.append(String.format(Locale.ROOT,"%s %.2f %.2f ",i==0?"M":"L",x,y));

@@ -42,8 +42,8 @@ class WaterConsumptionTests extends IntegrationTestSupport {
     }
     @Test void splitsMeasuredVolumeWithoutDoubleCountingAndPreservesCalibrationSnapshot() throws Exception {
         Instant at=period.start().plusSeconds(3600);
-        reading("total",at,100000,60000);
-        manual("esp32",at.minusSeconds(30),at,25000);
+        reading("total",at,100000,600000);
+        manual("esp32",at.minusSeconds(150),at,25000);
         manual("other",at.minusSeconds(30),at,500000);
         var result=service.consumption(period);
         assertThat(result.automatic()).isEqualByComparingTo("75");
@@ -61,7 +61,7 @@ class WaterConsumptionTests extends IntegrationTestSupport {
     @Test void emptyAndManualOnlyPeriodsHaveSafePercentages() {
         var empty=service.consumption(period);
         assertThat(empty.total()).isZero();assertThat(empty.automaticPercent()).isZero();assertThat(empty.manualPercent()).isZero();
-        manual("esp32",period.start().plusSeconds(1),period.start().plusSeconds(2),1000);
+        manual("esp32",period.start().plusSeconds(1),period.start().plusSeconds(61),1000);
         var incomplete=service.consumption(period);
         assertThat(incomplete.automatic()).isZero();assertThat(incomplete.manualPercent()).isEqualByComparingTo("100");
         assertThat(incomplete.incomplete()).isTrue();
@@ -70,7 +70,7 @@ class WaterConsumptionTests extends IntegrationTestSupport {
         reading("cross",period.end().plusSeconds(30),10000,60000);
         reading("after",period.end().plusSeconds(120),50000,60000);
         reading("before",period.start(),50000,60000);
-        manual("esp32",period.end().minusSeconds(30),period.end().plusSeconds(30),2000);
+        manual("esp32",period.end().minusSeconds(6),period.end().plusSeconds(6),2000);
         var result=service.consumption(period);
         assertThat(result.total()).isEqualByComparingTo("5");
         assertThat(result.manual()).isEqualByComparingTo("1");

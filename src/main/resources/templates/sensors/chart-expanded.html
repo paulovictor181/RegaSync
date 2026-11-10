@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:replace="~{fragments/layout :: head(${'Gráfico · '+sensor.name})}"></head>
+  <body class="flex min-h-dvh flex-col">
+    <header th:replace="~{fragments/layout :: header}"></header>
+    <main id="conteudo" class="mx-auto w-full max-w-[100rem] flex-1 px-5 py-8 sm:px-8">
+      <a
+        th:if="${!demo}"
+        th:href="@{/sensores/{id}(id=${sensor.id},from=${from},to=${to})}"
+        class="text-sm font-semibold text-brand-700"
+      >
+        ← Voltar ao sensor
+      </a>
+      <a
+        th:if="${demo}"
+        th:href="@{/dashboard/demo(from=${from},to=${to})}"
+        class="text-sm font-semibold text-brand-700"
+      >
+        ← Voltar à demonstração
+      </a>
+      <p th:if="${demo}" class="notice-success mt-4">
+        Modo demonstração · dados fictícios em memória.
+      </p>
+      <h1 class="mt-4 text-2xl font-semibold" th:text="${sensor.name}"></h1>
+      <form
+        method="get"
+        class="mt-5 grid items-end gap-4 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <label class="form-label min-w-0">
+          De
+          <input
+            th:if="${!demo}"
+            class="form-input h-12 font-normal"
+            type="datetime-local"
+            name="startAt"
+            th:value="${startAt}"
+            required
+          />
+          <input
+            th:if="${demo}"
+            class="form-input h-12 font-normal"
+            type="date"
+            name="from"
+            th:value="${from}"
+            required
+          />
+        </label>
+        <label class="form-label min-w-0">
+          Até
+          <input
+            th:if="${!demo}"
+            class="form-input h-12 font-normal"
+            type="datetime-local"
+            name="endAt"
+            th:value="${endAt}"
+            required
+          />
+          <input
+            th:if="${demo}"
+            class="form-input h-12 font-normal"
+            type="date"
+            name="to"
+            th:value="${to}"
+            required
+          />
+        </label>
+        <label class="form-label min-w-0">
+          Intervalo
+          <select name="interval" class="form-input h-12 font-normal">
+            <option value="auto" th:selected="${interval=='auto'}">Automático</option>
+            <option value="minute" th:selected="${interval=='minute'}">1 minuto</option>
+            <option value="hour" th:selected="${interval=='hour'}">1 hora</option>
+            <option value="day" th:selected="${interval=='day'}">1 dia</option>
+          </select>
+        </label>
+        <button class="button-secondary h-12">Aplicar</button>
+      </form>
+      <p th:if="${!demo}" class="mt-2 text-xs text-slate-500">
+        Horários de Brasília. O horário final é exclusivo; use um intervalo curto para inspecionar
+        detalhes.
+      </p>
+      <p th:if="${chartError}" class="notice-error mt-4" role="alert" th:text="${chartError}"></p>
+      <section class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 sm:p-8">
+        <div th:replace="~{sensors/chart :: chart(${chart},${sensor.type.unit()})}"></div>
+        <p
+          id="chart-point-detail"
+          class="mt-5 rounded-xl bg-brand-50 p-4 text-sm"
+          aria-live="polite"
+        >
+          Clique em um ponto, passe o cursor ou use Tab para consultar a data e o valor.
+        </p>
+      </section>
+    </main>
+    <script>
+      document.querySelectorAll("svg circle").forEach((point) => {
+        const show = () => {
+          document.getElementById("chart-point-detail").textContent =
+            point.querySelector("title").textContent;
+        };
+        point.addEventListener("click", show);
+        point.addEventListener("focus", show);
+        point.addEventListener("mouseenter", show);
+      });
+    </script>
+  </body>
+</html>

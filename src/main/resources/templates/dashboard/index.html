@@ -80,13 +80,30 @@
         </p>
         <p class="mt-3 text-xs leading-5 text-slate-500">
           O nível de cada pote representa sua participação no total, e não uma capacidade em litros.
-          Automático = fluxo total medido menos o manual. Medições e sessões que atravessam os
-          limites do filtro são rateadas pelo tempo.
+          O automático considera o fluxo válido fora das sessões manuais; o manual usa sessões com
+          vazão média válida. Medições nos limites do filtro são rateadas pelo tempo.
         </p>
         <p th:if="${consumption.incomplete}" class="notice-error mt-3">
-          O volume manual supera o fluxo recebido no período. Há medições incompletas; o consumo
-          automático está limitado a zero.
+          O volume manual supera o fluxo válido recebido no período. Há medições incompletas ou
+          suspeitas; confira os sensores e a calibração.
         </p>
+        <p
+          class="mt-3 text-xs text-slate-500"
+          th:if="${!demo}"
+          th:text="${'Faixa válida de fluxo: '+flowLimits.minimum+' a '+flowLimits.maximum+' L/min. Vazão zero permanece válida.'}"
+        ></p>
+        <a
+          th:if="${isAdmin and !demo}"
+          th:href="@{/admin/configuracoes/fluxo}"
+          class="mt-2 inline-flex text-sm font-semibold text-brand-700 hover:underline"
+        >
+          Alterar limites de vazão →
+        </a>
+        <p
+          th:if="${consumption.excludedSamples>0 or consumption.excludedManualSessions>0}"
+          class="mt-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800"
+          th:text="${'Possível interferência: '+consumption.excludedSamples+' leituras de fluxo e '+consumption.excludedManualSessions+' sessões manuais excluídas dos totais.'}"
+        ></p>
       </section>
       <section
         aria-label="Resumo dos sensores"
@@ -183,7 +200,24 @@
             </time>
           </div>
 
-          <div th:replace="~{sensors/chart :: chart(${charts[s.id]}, ${s.type.unit()})}"></div>
+          <a
+            th:if="${!demo}"
+            th:href="@{/sensores/{id}/grafico(id=${s.id},from=${from},to=${to})}"
+            class="block rounded-xl focus-visible:outline-2 focus-visible:outline-brand-600"
+            th:aria-label="${'Ampliar gráfico de '+s.name}"
+          >
+            <div th:replace="~{sensors/chart :: chart(${charts[s.id]}, ${s.type.unit()})}"></div>
+            <span class="mt-3 block text-sm font-semibold text-brand-700">Ampliar gráfico ↗</span>
+          </a>
+          <a
+            th:if="${demo}"
+            th:href="@{/dashboard/demo/grafico/{id}(id=${s.id},from=${from},to=${to})}"
+            class="block rounded-xl"
+            th:aria-label="${'Ampliar gráfico de demonstração de '+s.name}"
+          >
+            <div th:replace="~{sensors/chart :: chart(${charts[s.id]}, ${s.type.unit()})}"></div>
+            <span class="mt-3 block text-sm font-semibold text-brand-700">Ampliar gráfico ↗</span>
+          </a>
           <footer
             th:if="${!demo}"
             class="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4"
