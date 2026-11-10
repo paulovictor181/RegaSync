@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:replace="~{fragments/layout :: head('Dashboard')}"></head>
+  <body class="flex min-h-dvh flex-col">
+    <header th:replace="~{fragments/layout :: header}"></header>
+    <main id="conteudo" class="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:px-8 sm:py-10">
+      <p class="text-xs font-semibold tracking-widest text-brand-600 uppercase">
+        Visão geral da irrigação
+      </p>
+      <h1 class="mt-3 text-3xl font-semibold text-slate-900">Dashboard</h1>
+      <p class="mt-2 text-sm text-slate-500">
+        Acompanhe a bomba, a umidade do solo e o fluxo de água. As últimas leituras são atualizadas
+        a cada cinco segundos.
+      </p>
+      <section
+        aria-label="Resumo dos sensores"
+        class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <article class="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 class="text-sm text-slate-500">Sensores cadastrados</h2>
+          <p class="mt-2 text-3xl font-semibold" th:text="${totalSensors}"></p>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 class="text-sm text-slate-500">Sensores ativos</h2>
+          <p class="mt-2 text-3xl font-semibold" th:text="${activeSensors}"></p>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 class="text-sm text-slate-500">Umidade · ativos</h2>
+          <p class="mt-2 text-3xl font-semibold" th:text="${humiditySensors}"></p>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 class="text-sm text-slate-500">Fluxo · ativos</h2>
+          <p class="mt-2 text-3xl font-semibold" th:text="${flowSensors}"></p>
+        </article>
+      </section>
+      <section class="mt-6 rounded-2xl border border-brand-200 bg-brand-50 p-6">
+        <h2 class="text-lg font-semibold text-brand-900">Acionamentos da bomba</h2>
+        <p
+          class="mt-2 text-sm"
+          th:if="${pumpEvent != null}"
+          th:text="${(pumpEvent.running ? 'Último registro: bomba ligada em ' : 'Último registro: bomba desligada em ')+@brazilianDates.format(pumpEvent.measuredAt)+(pumpEvent.initialState ? ' (estado inicial)' : '')}"
+        ></p>
+        <p class="mt-2 text-sm text-slate-500" th:if="${pumpEvent == null}">
+          Aguardando o primeiro estado enviado pelo ESP32.
+        </p>
+        <a
+          th:href="@{/bomba/historico}"
+          class="mt-3 inline-flex text-sm font-semibold text-brand-700 hover:underline"
+        >
+          Ver horários de acionamento e desligamento →
+        </a>
+      </section>
+
+      <h2 class="mt-8 text-xl font-semibold">Monitoramento dos sensores ativos</h2>
+      <p class="mt-2 text-sm text-slate-500">
+        Gráficos das últimas 24 horas · horário de Brasília. As médias são atualizadas ao abrir a
+        página.
+      </p>
+      <section
+        th:if="${!sensors.empty}"
+        aria-label="Leituras mais recentes dos sensores"
+        class="mt-5 grid gap-4 lg:grid-cols-2"
+      >
+        <article
+          th:each="s:${sensors.content}"
+          th:with="reading=${latestReadings[s.id]}"
+          class="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6"
+        >
+          <header class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p
+                class="text-xs font-semibold tracking-wide text-brand-600 uppercase"
+                th:text="${s.type == T(br.com.ufersa.regasync.sensor.model.SensorType).UMIDADE ? 'Umidade do solo' : 'Fluxo de água'}"
+              >
+                Tipo do sensor
+              </p>
+              <h2 class="mt-1 break-words text-lg font-semibold text-slate-900" th:text="${s.name}">
+                Sensor
+              </h2>
+            </div>
+            <span
+              class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold"
+              th:classappend="${s.active ? ' bg-brand-50 text-brand-700' : ' bg-slate-100 text-slate-500'}"
+              th:text="${s.active ? 'Ativo' : 'Inativo'}"
+            >
+              Ativo
+            </span>
+          </header>
+
+          <div class="mt-5 rounded-xl bg-brand-50 p-4">
+            <p class="text-xs font-medium text-slate-500">Última leitura</p>
+            <p
+              th:id="'reading-'+${s.id}"
+              class="mt-1 text-3xl font-semibold tracking-tight text-brand-900"
+              aria-live="polite"
+              th:text="${reading == null ? 'Aguardando leitura' : #numbers.formatDecimal(reading.convertedValue,1,2)+' '+reading.unit}"
+            >
+              Aguardando leitura
+            </p>
+            <time
+              th:id="'time-'+${s.id}"
+              class="mt-2 block text-xs text-slate-500"
+              th:text="${reading == null ? 'Sem dados recebidos' : 'Medido em '+@brazilianDates.format(reading.measuredAt)}"
+            >
+              Sem dados recebidos
+            </time>
+          </div>
+
+          <div th:replace="~{sensors/chart :: chart(${charts[s.id]}, ${s.type.unit()})}"></div>
+          <footer class="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+            <a
+              th:if="${s.type == T(br.com.ufersa.regasync.sensor.model.SensorType).FLUXO}"
+              th:href="@{/sensores/{id}/rega-manual(id=${s.id})}"
+              class="button-primary w-full"
+            >
+              Rega manual
+            </a>
+            <a
+              th:href="@{/sensores/{id}(id=${s.id})}"
+              class="text-sm font-semibold text-brand-700 hover:underline"
+            >
+              Histórico
+            </a>
+          </footer>
+        </article>
+      </section>
+
+      <p
+        th:if="${sensors.empty}"
+        class="mt-5 rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500"
+      >
+        Nenhum sensor ativo para monitorar. Consulte o cadastro em Sensores.
+      </p>
+      <nav
+        th:if="${sensors.totalPages > 1}"
+        aria-label="Paginação do monitoramento"
+        class="mt-6 flex items-center justify-between gap-3"
+      >
+        <a
+          th:if="${sensors.hasPrevious()}"
+          th:href="@{/dashboard(page=${sensors.number-1})}"
+          class="button-secondary"
+        >
+          Anterior
+        </a>
+        <span
+          class="text-sm text-slate-500"
+          th:text="${'Página '+(sensors.number+1)+' de '+sensors.totalPages}"
+        ></span>
+        <a
+          th:if="${sensors.hasNext()}"
+          th:href="@{/dashboard(page=${sensors.number+1})}"
+          class="button-secondary"
+        >
+          Próxima
+        </a>
+      </nav>
+    </main>
+    <footer th:replace="~{fragments/layout :: footer}"></footer>
+    <script th:inline="javascript">
+      const ids = [[${sensors.content.![id]}]];
+      async function refreshLatestReadings() {
+        if (ids.length === 0) return;
+        try {
+          const response = await fetch('/api/sensores/atuais?ids=' + ids.join(','));
+          if (response.status === 401 || response.redirected) {
+            window.location.href = '/login';
+            return;
+          }
+          if (!response.ok) return;
+          const latest = await response.json();
+          for (const [id, reading] of Object.entries(latest)) {
+            const value = document.getElementById('reading-' + id);
+            const time = document.getElementById('time-' + id);
+            if (value) value.textContent = Number(reading.valor).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' ' + reading.unidade;
+            if (time) time.textContent = 'Medido em ' + new Date(reading.medidoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+          }
+        } catch (error) {
+          // O dashboard mantém a última leitura visível enquanto tenta atualizar novamente.
+        }
+      }
+      refreshLatestReadings();
+      window.setInterval(refreshLatestReadings, 5000);
+    </script>
+  </body>
+</html>

@@ -576,6 +576,7 @@ void networkTask(void*) {
   uint32_t lastManualSent = 0;
   int acknowledgedCalibrationStatus = -1;
   bool acknowledgedPause = false;
+  bool acknowledgedRelayOn = false;
 
   for (;;) {
     uint32_t now = millis();
@@ -653,7 +654,7 @@ void networkTask(void*) {
         (acknowledgedVersion != state.config.version ||
          acknowledgedHumidityVersion != state.humidityCalibration.version ||
          acknowledgedCalibrationStatus != static_cast<int>(state.calibrationStatus) ||
-         acknowledgedPause != state.irrigationPaused || now - lastStateSent >= 10000)) {
+         acknowledgedPause != state.irrigationPaused || acknowledgedRelayOn != state.relayOn || now - lastStateSent >= 10000)) {
       if (!sendState(state)) {
         mqtt.stop();
         continue;
@@ -662,6 +663,7 @@ void networkTask(void*) {
       acknowledgedHumidityVersion = state.humidityCalibration.version;
       acknowledgedCalibrationStatus = static_cast<int>(state.calibrationStatus);
       acknowledgedPause = state.irrigationPaused;
+      acknowledgedRelayOn = state.relayOn;
       lastStateSent = now;
     }
 

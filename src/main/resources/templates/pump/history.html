@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <head th:replace="~{fragments/layout :: head('Histórico da bomba')}"></head>
+  <body class="flex min-h-dvh flex-col">
+    <header th:replace="~{fragments/layout :: header}"></header>
+    <main id="conteudo" class="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:px-8">
+      <a th:href="@{/dashboard}" class="text-sm text-brand-700">← Dashboard</a>
+      <h1 class="mt-5 text-3xl font-semibold">Acionamentos da bomba</h1>
+      <p class="mt-3 text-sm text-slate-500">
+        Mudanças do relé informadas pelo ESP32 · horário de Brasília. O primeiro estado recebido é
+        identificado separadamente. Eventos durante desconexões podem não ser registrados.
+      </p>
+      <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-brand-50">
+            <tr>
+              <th class="p-4">Evento</th>
+              <th class="p-4">Horário informado</th>
+              <th class="p-4">Recebido no servidor</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="event:${events.content}" class="border-t">
+              <td
+                class="p-4"
+                th:text="${(event.running ? 'Bomba ligada' : 'Bomba desligada')+(event.initialState ? ' (estado inicial)' : '')}"
+              ></td>
+              <td class="p-4" th:text="${@brazilianDates.format(event.measuredAt)}"></td>
+              <td class="p-4" th:text="${@brazilianDates.format(event.receivedAt)}"></td>
+            </tr>
+            <tr th:if="${events.empty}">
+              <td colspan="3" class="p-8 text-center text-slate-500">
+                Aguardando o primeiro estado da bomba enviado pelo ESP32.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <nav
+        th:if="${events.totalPages > 1}"
+        aria-label="Paginação dos acionamentos"
+        class="mt-6 flex items-center justify-between gap-3"
+      >
+        <a
+          th:if="${events.hasPrevious()}"
+          th:href="@{/bomba/historico(page=${events.number-1})}"
+          class="button-secondary"
+        >
+          Anterior
+        </a>
+        <span
+          class="text-sm text-slate-500"
+          th:text="${'Página '+(events.number+1)+' de '+events.totalPages+' · '+events.totalElements+' eventos'}"
+        ></span>
+        <a
+          th:if="${events.hasNext()}"
+          th:href="@{/bomba/historico(page=${events.number+1})}"
+          class="button-secondary"
+        >
+          Próxima
+        </a>
+      </nav>
+    </main>
+    <footer th:replace="~{fragments/layout :: footer}"></footer>
+  </body>
+</html>

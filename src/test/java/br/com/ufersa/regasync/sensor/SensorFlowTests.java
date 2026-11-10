@@ -44,8 +44,8 @@ class SensorFlowTests extends IntegrationTestSupport {
         String dashboard = mvc.perform(get("/sensores"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        assertThat(dashboard).contains("Leituras mais recentes", "grid gap-4 sm:grid-cols-2 xl:grid-cols-3");
-        assertThat(dashboard).doesNotContain("<table");
+        assertThat(dashboard).contains("Sensores cadastrados", "<table");
+        assertThat(dashboard).doesNotContain("Acionamentos da bomba", "Evolução ·");
         mvc.perform(get("/admin/sensores/novo"))
                 .andExpect(status().isForbidden());
         mvc.perform(post("/admin/sensores").with(csrf()))

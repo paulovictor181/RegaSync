@@ -3,6 +3,12 @@ package br.com.ufersa.regasync.sensor.ui;
 import br.com.ufersa.regasync.sensor.form.SensorForm;
 import br.com.ufersa.regasync.sensor.model.SensorType;
 import br.com.ufersa.regasync.sensor.service.SensorService;
+import br.com.ufersa.regasync.sensor.service.SensorChartService;
+import br.com.ufersa.regasync.shared.ui.BrazilianDates;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Sort;
 import jakarta.validation.Valid;
 import java.time.*;
 import java.util.*;
@@ -18,14 +24,36 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 @Controller
 public class SensorController {
     private final SensorService service;
-    public SensorController(SensorService service){this.service=service;}
+    private final SensorChartService charts;
+    public SensorController(SensorService service, SensorChartService charts){this.service=service;this.charts=charts;}
     @GetMapping("/sensores") public String list(@RequestParam(required=false) String q,@RequestParam(required=false) SensorType type,
             @RequestParam(required=false) Boolean active,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="10") int size,
             @RequestParam(defaultValue="name") String sort,@RequestParam(defaultValue="asc") String direction,Model model){
-        model.addAttribute("sensors",service.search(q,type,active,page,size,sort,direction));model.addAttribute("q",q);model.addAttribute("type",type);model.addAttribute("active",active);model.addAttribute("size",size);model.addAttribute("sort",sort);model.addAttribute("direction",direction);model.addAttribute("types",SensorType.values());return "sensors/list";
+        var sensors = service.search(q,type,active,page,size,sort,direction);
+        model.addAttribute("sensors",sensors);model.addAttribute("q",q);model.addAttribute("type",type);model.addAttribute("active",active);model.addAttribute("size",sensors.getSize());model.addAttribute("sort",sensors.getSort().iterator().next().getProperty());model.addAttribute("direction",sensors.getSort().iterator().next().getDirection().name().toLowerCase(Locale.ROOT));model.addAttribute("types",SensorType.values());return "sensors/list";
     }
-    @GetMapping("/sensores/{id}") public String detail(@PathVariable long id,@RequestParam(defaultValue="0") int page,Model model){
-        var sensor=service.get(id);Instant now=Instant.now();model.addAttribute("sensor",sensor);model.addAttribute("latest",service.latest(id).orElse(null));model.addAttribute("readings",service.history(id,now.minus(Duration.ofDays(30)),now.plus(Duration.ofMinutes(5)),PageRequest.of(Math.max(0,page),20,org.springframework.data.domain.Sort.by("measuredAt").descending())));return "sensors/detail";
+    @GetMapping("/sensores/{id}") public String detail(@PathVariable long id,
+            @RequestParam(defaultValue="0") int page, @RequestParam(defaultValue="20") int size,
+            @RequestParam(defaultValue="measuredAt") String sort, @RequestParam(defaultValue="desc") String direction,
+            @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate to, Model model){
+        var sensor=service.get(id);
+        LocalDate today=LocalDate.now(BrazilianDates.ZONE);
+        if(from==null) from=today.minusDays(30);
+        if(to==null) to=today;
+        if(from.isAfter(to)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"A data inicial deve ser anterior à final.");
+        String field=List.of("measuredAt","rawValue","convertedValue").contains(sort)?sort:"measuredAt";
+        var order=Sort.by("asc".equalsIgnoreCase(direction)?Sort.Direction.ASC:Sort.Direction.DESC,field).and(Sort.by("id").descending());
+        var history=service.history(id,from.atStartOfDay(BrazilianDates.ZONE).toInstant(),
+                to.plusDays(1).atStartOfDay(BrazilianDates.ZONE).toInstant(),
+                PageRequest.of(Math.max(0,page),Math.min(50,Math.max(1,size)),order));
+        model.addAttribute("sensor",sensor);
+        model.addAttribute("chart",charts.charts(List.of(id)).get(id));
+        model.addAttribute("latest",service.latest(id).orElse(null));
+        model.addAttribute("readings",history);
+        model.addAttribute("from",from);model.addAttribute("to",to);
+        model.addAttribute("sort",field);model.addAttribute("direction",order.getOrderFor(field).getDirection().name().toLowerCase(Locale.ROOT));
+        return "sensors/detail";
     }
     @GetMapping("/admin/sensores/novo") public String newSensor(Model model){model.addAttribute("sensorForm",new SensorForm());model.addAttribute("types",SensorType.values());return "sensors/form";}
     @GetMapping("/admin/sensores/{id}/editar") public String edit(@PathVariable long id,Model model){var s=service.get(id);var f=new SensorForm();f.populate(s);model.addAttribute("sensor",s);model.addAttribute("sensorForm",f);model.addAttribute("types",SensorType.values());return "sensors/form";}

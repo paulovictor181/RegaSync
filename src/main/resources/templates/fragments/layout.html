@@ -34,10 +34,16 @@
         <div class="text-brand-900"><a th:replace="~{fragments/layout :: brand}"></a></div>
         <nav aria-label="Menu principal" class="flex flex-wrap items-center gap-3">
           <a
-            th:href="@{/sensores}"
+            th:href="@{/dashboard}"
             class="rounded-lg px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
           >
             Dashboard
+          </a>
+          <a
+            th:href="@{/sensores}"
+            class="rounded-lg px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+          >
+            Sensores
           </a>
           <a
             th:if="${isAdmin}"

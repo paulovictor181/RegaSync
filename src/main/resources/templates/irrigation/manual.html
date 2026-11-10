@@ -4,7 +4,7 @@
   <body class="flex min-h-dvh flex-col">
     <header th:replace="~{fragments/layout :: header}"></header>
     <main id="conteudo" class="mx-auto w-full max-w-3xl flex-1 px-5 py-8 sm:px-8">
-      <a th:href="@{/sensores}" class="text-sm font-semibold text-brand-700">← Dashboard</a>
+      <a th:href="@{/dashboard}" class="text-sm font-semibold text-brand-700">← Dashboard</a>
       <p class="mt-6 text-xs font-semibold tracking-widest text-brand-600 uppercase">
         Medição de água
       </p>
@@ -97,7 +97,7 @@
           <p
             th:if="${irrigationSession.startedAt != null}"
             class="mt-1 text-xs text-slate-500"
-            th:text="${#temporals.format(irrigationSession.startedAt,'dd/MM/yyyy HH:mm:ss')+' UTC'}"
+            th:text="${@brazilianDates.format(irrigationSession.startedAt)+' (Brasília)'}"
           ></p>
           <p th:if="${irrigationSession.interrupted}" class="mt-2 text-xs text-red-700">
             Volume parcial: o ESP32 reiniciou durante a medição.

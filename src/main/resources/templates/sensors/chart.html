@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <section
+      th:fragment="chart(chart, unit)"
+      class="mt-5"
+      aria-label="Gráfico de leituras nas últimas 24 horas"
+    >
+      <h3
+        class="text-sm font-semibold text-slate-700"
+        th:text="${'Evolução · últimas 24 horas ('+unit+')'}"
+      ></h3>
+      <p class="mt-1 text-xs text-slate-500">Médias por hora · horário de Brasília</p>
+      <svg
+        th:if="${chart != null}"
+        viewBox="0 0 600 195"
+        role="img"
+        aria-label="Médias por hora. Consulte os pontos para ver data e valor."
+        class="mt-3 w-full"
+      >
+        <line x1="40" y1="30" x2="580" y2="30" stroke="#e2e8f0" />
+        <line x1="40" y1="95" x2="580" y2="95" stroke="#e2e8f0" />
+        <line x1="40" y1="160" x2="580" y2="160" stroke="#94a3b8" />
+        <text x="0" y="22" fill="#64748b" font-size="14" th:text="${chart.maximum}"></text>
+        <text x="10" y="163" fill="#64748b" font-size="14">0</text>
+        <text x="40" y="187" fill="#64748b" font-size="14">Há 24 h</text>
+        <text x="580" y="187" text-anchor="end" fill="#64748b" font-size="14">Agora</text>
+        <path th:d="${chart.path}" fill="none" stroke="#296548" stroke-width="3" />
+        <circle
+          th:each="point:${chart.points}"
+          th:cx="${point.x}"
+          th:cy="${point.y}"
+          r="4"
+          fill="#296548"
+          tabindex="0"
+        >
+          <title th:text="${point.label+' (unidade: '+unit+')'}"></title>
+        </circle>
+      </svg>
+      <p th:if="${chart == null}" class="py-8 text-center text-sm text-slate-500">
+        Sem leituras nas últimas 24 horas.
+      </p>
+      <p
+        th:if="${chart != null}"
+        class="text-xs text-slate-500"
+        th:text="${chart.samples+' leituras no período. Intervalos sem dados aparecem como lacunas.'}"
+      ></p>
+    </section>
+  </body>
+</html>

@@ -12,6 +12,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 public interface SensorRepository extends JpaRepository<Sensor,Long>, JpaSpecificationExecutor<Sensor> {
     Optional<Sensor> findByTypeAndNumber(SensorType type,int number);
     boolean existsByTypeAndNumber(SensorType type,int number);
+    long countByActive(boolean active);
+    long countByTypeAndActive(SensorType type, boolean active);
     List<Sensor> findByType(SensorType type);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from Sensor s where s.type = :type and s.number = :number")

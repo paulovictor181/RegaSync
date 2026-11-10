@@ -20,12 +20,12 @@ public class SensorService {
     public SensorService(SensorRepository sensors, SensorReadingRepository readings, ReadingMessage decoder) { this.sensors=sensors; this.readings=readings; this.decoder=decoder; }
     @Transactional(readOnly=true)
     public Page<Sensor> search(String q, SensorType type, Boolean active, int page, int size, String sort, String direction) {
-        String field=List.of("name","type","number","active","updatedAt").contains(sort)?sort:"name";
+        String field=List.of("name","type","number","active","createdAt","updatedAt").contains(sort)?sort:"name";
         Specification<Sensor> spec=(r,c,b)->b.conjunction();
         if(q!=null&&!q.isBlank()){String x="%"+q.strip().toLowerCase(Locale.ROOT)+"%";String term=q.strip();spec=spec.and((r,c,b)->{var matchesName=b.like(b.lower(r.get("name")),x);try{return b.or(matchesName,b.equal(r.get("number"),Integer.parseInt(term)));}catch(NumberFormatException ignored){return matchesName;}});}
         if(type!=null)spec=spec.and((r,c,b)->b.equal(r.get("type"),type));
         if(active!=null)spec=spec.and((r,c,b)->b.equal(r.get("active"),active));
-        return sensors.findAll(spec,PageRequest.of(Math.max(0,page),Math.min(50,Math.max(1,size)),Sort.by("desc".equalsIgnoreCase(direction)?Sort.Direction.DESC:Sort.Direction.ASC,field)));
+        return sensors.findAll(spec,PageRequest.of(Math.max(0,page),Math.min(50,Math.max(1,size)),Sort.by("desc".equalsIgnoreCase(direction)?Sort.Direction.DESC:Sort.Direction.ASC,field).and(Sort.by("id"))));
     }
     @Transactional(readOnly=true) public Sensor get(long id){return sensors.findById(id).orElseThrow(()->new NoSuchElementException("Sensor não encontrado."));}
     @Transactional @PreAuthorize("hasRole('ADMIN')") public Sensor create(SensorForm f){
@@ -37,10 +37,11 @@ public class SensorService {
         s.update(f.getName(),f.getDryAdc(),f.getWetAdc(),f.getPulsesPerLiter(),f.isActive());return sensors.save(s);
     }
     @Transactional(readOnly=true) public Optional<SensorReading> latest(long id){return readings.findFirstBySensorIdOrderByMeasuredAtDescIdDesc(id);}
-    @Transactional(readOnly=true) public Page<SensorReading> history(long id,Instant from,Instant to,Pageable p){get(id);return readings.findBySensorIdAndMeasuredAtBetween(id,from,to,p);}
+    @Transactional(readOnly=true) public Page<SensorReading> history(long id,Instant from,Instant to,Pageable p){get(id);return readings.findBySensorIdAndMeasuredAtGreaterThanEqualAndMeasuredAtLessThan(id,from,to,p);}
     @Transactional(readOnly=true) public Map<Long,SensorReading> latestFor(List<Long> ids){
+        if(ids.isEmpty())return Map.of();
         if(ids.size()>50)throw new IllegalArgumentException("Até 50 sensores por consulta.");Map<Long,SensorReading> map=new HashMap<>();
-        readings.findBySensorIdInOrderBySensorIdAscMeasuredAtDesc(ids).forEach(r->map.putIfAbsent(r.getSensor().getId(),r));return map;
+        readings.latestForSensors(ids).forEach(r->map.putIfAbsent(r.getSensor().getId(),r));return map;
     }
     @Transactional public boolean ingest(String topic,String json){
         SensorType type=Arrays.stream(SensorType.values()).filter(t->topic.matches("/"+t.prefix()+"/[1-9][0-9]*")).findFirst().orElse(null);if(type==null)return false;

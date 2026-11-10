@@ -83,9 +83,9 @@ Mensagens MQTT 3.1.1 usam JSON, QoS 1 e `retain=false`:
 
 Publique no tópico de umidade cadastrado. Para vazão use `{"id":"boot-a1:43","medidoEm":"2026-11-05T12:00:01Z","pulsos":45,"intervaloMs":1000}` no tópico cadastrado de fluxo. `id` precisa ser único por sensor, inclusive após reinicializar o ESP. `medidoEm` é UTC. O ESP deve sincronizar o relógio e autenticar com `MQTT_ESP_USERNAME` e `MQTT_ESP_PASSWORD`.
 
-Para usar a aplicação pelo IntelliJ com o broker do Compose, mantenha `MQTT_ENABLED=true` na configuração de execução e informe `MQTT_URL=tcp://localhost:1883`, `MQTT_USERNAME` e `MQTT_PASSWORD` com as credenciais de servidor presentes no `.env`. No Compose essas variáveis já apontam à rede interna. O Mosquitto separa as credenciais do ESP (publicação nos tópicos dos sensores) das credenciais do servidor, que lê os sensores e pode publicar configurações de dispositivos. O histórico é consultado por até 30 dias nesta tela; alterar calibração preserva os valores históricos.
+Para usar a aplicação pelo IntelliJ com o broker do Compose, mantenha `MQTT_ENABLED=true` na configuração de execução e informe `MQTT_URL=tcp://localhost:1883`, `MQTT_USERNAME` e `MQTT_PASSWORD` com as credenciais de servidor presentes no `.env`. No Compose essas variáveis já apontam à rede interna. O Mosquitto separa as credenciais do ESP (publicação nos tópicos dos sensores) das credenciais do servidor, que lê os sensores e pode publicar configurações de dispositivos. O histórico abre nos últimos 30 dias e permite selecionar outro período, ordenar os valores e paginar no banco; alterar calibração preserva os valores históricos.
 
-A API autenticada `GET /api/sensores/atuais?ids=1,2` recebe até 50 IDs e devolve um objeto indexado pelo ID do sensor. Cada item tem `valor`, `unidade`, `medidoEm` e `recebidoEm`; sensores sem leitura recente são omitidos. A página de monitoramento usa esse contrato para atualizar os valores a cada cinco segundos.
+A API autenticada `GET /api/sensores/atuais?ids=1,2` recebe até 50 IDs e devolve um objeto indexado pelo ID do sensor. Cada item tem `valor`, `unidade`, `medidoEm` e `recebidoEm`; sensores sem leitura recente são omitidos. A página de monitoramento usa esse contrato para atualizar os valores a cada cinco segundos. Os gráficos mostram médias por hora das últimas 24 horas, calculadas no banco e atualizadas ao abrir a página, com lacunas nos intervalos sem leituras. O cadastro de cada sensor aparece no painel e no detalhe. As datas na interface seguem `dd/MM/aaaa HH:mm:ss` no fuso `America/Sao_Paulo` (horário de Brasília); os instantes no banco e na API continuam em UTC.
 
 ## Compose e acesso pela internet
 
@@ -143,3 +143,13 @@ A suíte usa Testcontainers com PostgreSQL descartável, portas dinâmicas e mig
 Os testes cobrem acesso anônimo, autenticação válida/inválida, e-mail normalizado, credenciais removidas da sessão, rotação da sessão, redirecionamento após login, CSRF, logout, isolamento dos dados da conta, autorização de rotas e serviços, cadastro, e-mail duplicado, validação de senhas e provisionamento idempotente.
 
 `npm run check:ui` verifica os templates/CSS com Prettier e faz lint do CSS com Stylelint. Não há TypeScript nesta interface. Para formatar os arquivos da interface, use `npm run format:ui`.
+
+### Histórico de acionamentos da bomba
+
+O dashboard mostra o último evento da bomba do ESP32 configurado em `MQTT_ESP_USERNAME`. A tela `/bomba/historico` lista as mudanças de `releLigado` recebidas em `/regasync/dispositivos/{usuario}/estado`, em páginas de dez eventos. Mensagens repetidas, fora de ordem, inválidas ou de outro dispositivo são ignoradas. O primeiro estado é marcado como inicial, pois não confirma o instante de um acionamento. O horário exibido é o informado pelo dispositivo, convertido para Brasília. O histórico começa a ser registrado após esta atualização; períodos sem conexão podem perder mudanças. O estado do relé indica o comando da bomba, sem confirmar mecanicamente o funcionamento.
+
+O firmware passa a publicar o estado também ao detectar mudança do relé. Atualize o ESP32 para reduzir o atraso de detecção; versões anteriores enviam o estado periodicamente (a cada dez segundos) e podem omitir acionamentos curtos.
+
+### Dashboard e cadastro de sensores
+
+O menu **Dashboard** (`/dashboard`) abre a visão geral da irrigação, com totais de sensores, último evento da bomba, últimas leituras e gráficos dos sensores ativos. O monitoramento mostra seis sensores por página. O menu **Sensores** (`/sensores`) abre a tabela de cadastros, com busca, filtros, ordenação, paginação e acesso a detalhes, configuração e rega manual. Os gráficos individuais continuam disponíveis no detalhe do sensor.
